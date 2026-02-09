@@ -9,36 +9,35 @@ export const generateMedicalQuestions = async (
   difficulty: Difficulty,
   targetLanguage: 'en' | 'ar' | 'original'
 ): Promise<Question[]> => {
-  // Always use process.env.API_KEY directly for initialization
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const difficultyInstruction = {
-    [Difficulty.EASY]: "focus on basic definitions and clear medical concepts.",
-    [Difficulty.MEDIUM]: "focus on clinical presentations and common diagnostic steps.",
-    [Difficulty.HARD]: "focus on differential diagnosis, complex pathophysiology, and second-line treatments.",
-    [Difficulty.VERY_HARD]: "focus on rare syndromes, subtle clinical findings, advanced research-level medical knowledge, and complex ethical/legal medical scenarios."
+    [Difficulty.EASY]: "Basic medical concepts, fundamental terminology, and simple facts.",
+    [Difficulty.MEDIUM]: "Clinical presentations, standard diagnostic procedures, and common treatments.",
+    [Difficulty.HARD]: "Differential diagnosis, complex pathophysiology, and specific pharmacology.",
+    [Difficulty.VERY_HARD]: "Advanced specialized medical knowledge, rare conditions, complex ethical dilemmas, and latest research-based clinical guidelines."
   }[difficulty];
 
   const prompt = `
-    You are a world-class Medical Professor. Based on the following medical content, generate exactly ${count} high-quality ${difficulty} level ${type === 'mix' ? 'mixed MCQ and True/False' : type} questions.
-    
-    Level Guidance: ${difficultyInstruction}
-    
-    Strict Guidelines:
-    - Questions must be 100% medically accurate.
-    - If MCQ, provide 4 unique options.
-    - If True/False, provide only "True" and "False" as options.
-    - For each question, provide a 'explanation' that gives deep clinical insight.
-    - Target Language: ${targetLanguage === 'original' ? 'the same as the input' : targetLanguage}.
-    
-    Input Content:
-    ${fileContent.substring(0, 45000)}
+    Role: Senior Medical Academic Examiner.
+    Task: Generate exactly ${count} medical questions.
+    Level: ${difficulty} (${difficultyInstruction})
+    Format: ${type === 'mix' ? 'A mixture of MCQs and True/False' : type.toUpperCase()}.
+    Language: ${targetLanguage === 'original' ? 'Same as input content' : targetLanguage}.
+
+    Instructions:
+    1. Every question must be clinically accurate and relevant to the content.
+    2. MCQ must have 4 options. T/F must have exactly 2 options: ["True", "False"] or ["صح", "خطأ"].
+    3. The 'explanation' field must provide high-yield clinical reasoning.
+    4. Return ONLY a valid JSON array of objects.
+
+    Content to analyze:
+    ${fileContent.substring(0, 30000)}
   `;
 
   try {
-    // Using gemini-3-pro-preview for complex reasoning tasks like medical question generation
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview', // Flash is better for structured JSON tasks
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -60,8 +59,11 @@ export const generateMedicalQuestions = async (
       }
     });
 
-    // Accessing the text property directly as it is not a method
-    const questions: Question[] = JSON.parse(response.text || '[]');
+    let text = response.text || '[]';
+    // Clean potential markdown code blocks if the API returns them despite the mimeType
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    const questions: Question[] = JSON.parse(text);
     return questions;
   } catch (error) {
     console.error("Gemini Error:", error);

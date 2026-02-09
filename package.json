@@ -14,7 +14,8 @@
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.0",
     "recharts": "^2.15.0",
-    "@google/genai": "^1.4.0"
+    "@google/genai": "^1.4.0",
+    "pdfjs-dist": "^4.10.38"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
