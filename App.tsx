@@ -6,7 +6,7 @@ import { TRANSLATIONS } from './constants';
 import { Difficulty, QuestionType, User, Subject, Quiz, QuizAttempt } from './types';
 import { generateQuizQuestions } from './services/geminiService';
 
-// إعداد عامل الـ PDF بشكل صحيح
+// إعداد عامل الـ PDF بشكل مستقر
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.10.38/build/pdf.worker.mjs`;
 
 /** --- Robust Text Extraction --- */
@@ -28,7 +28,7 @@ const extractTextFromFiles = async (files: File[]): Promise<string> => {
         combinedText += pdfText;
       } catch (e) {
         console.error("PDF Error:", file.name, e);
-        throw new Error(`تعذر قراءة ملف PDF: ${file.name}. تأكد أنه ليس محمياً بكلمة سر.`);
+        throw new Error(`تعذر قراءة ملف PDF: ${file.name}.`);
       }
     } else {
       const text = await file.text();
@@ -38,12 +38,6 @@ const extractTextFromFiles = async (files: File[]): Promise<string> => {
   return combinedText.trim();
 };
 
-const encodeQuiz = (quiz: Quiz) => btoa(encodeURIComponent(JSON.stringify(quiz)));
-const decodeQuiz = (data: string): Quiz | null => {
-  try { return JSON.parse(decodeURIComponent(atob(data))); } 
-  catch { return null; }
-};
-
 /** --- Components --- */
 
 const Navbar = ({ lang, setLang, user }: any) => {
@@ -51,6 +45,14 @@ const Navbar = ({ lang, setLang, user }: any) => {
   const navigate = useNavigate();
   const location = useLocation();
   const isHome = location.pathname === '/';
+
+  const handleOpenKeySelector = async () => {
+    if (window.aistudio && window.aistudio.openSelectKey) {
+      await window.aistudio.openSelectKey();
+    } else {
+      alert("خاصية اختيار المفتاح غير متوفرة في هذا المتصفح.");
+    }
+  };
 
   return (
     <nav className={`bg-white/80 backdrop-blur-md border-b sticky top-0 z-50 px-4 md:px-8 py-3 flex justify-between items-center ${lang === 'ar' ? 'rtl' : ''}`}>
@@ -65,13 +67,22 @@ const Navbar = ({ lang, setLang, user }: any) => {
         </h1>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        {/* زر اختيار المفتاح API */}
+        <button 
+          onClick={handleOpenKeySelector}
+          title="إعداد مفتاح API"
+          className="p-2 bg-amber-50 text-amber-600 rounded-xl border border-amber-100 hover:bg-amber-100 transition-colors flex items-center gap-2 text-xs font-bold"
+        >
+          🔑 <span className="hidden md:inline">مفتاح API</span>
+        </button>
+
         <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="text-xs font-bold text-slate-500 hover:text-indigo-600 border px-3 py-1 rounded-full">
           {lang === 'en' ? 'العربية' : 'English'}
         </button>
+
         {user.isLoggedIn && (
-           <div className="flex items-center gap-2 border-l pl-4">
-             <span className="text-sm font-bold hidden sm:inline">{user.name}</span>
+           <div className="flex items-center gap-2 border-l pl-3">
              <img src={user.photo} className="w-8 h-8 rounded-full border shadow-sm" alt="P" />
            </div>
         )}
@@ -88,48 +99,36 @@ const Card = ({ children, className = "" }: any) => (
 
 /** --- Views --- */
 
-const Dashboard = ({ strings, attempts, quizzes, user }: any) => {
+const Dashboard = ({ strings, quizzes }: any) => {
   const navigate = useNavigate();
-
-  const handleShare = (quiz: Quiz) => {
-    const code = encodeQuiz(quiz);
-    const url = `${window.location.origin}${window.location.pathname}#/import?data=${code}`;
-    navigator.clipboard.writeText(url);
-    alert(strings.copySuccess);
-  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row gap-6">
-        <Card className="flex-1 bg-gradient-to-br from-indigo-600 to-indigo-800 text-white relative overflow-hidden group">
-          <div className="relative z-10">
-            <h2 className="text-3xl font-black mb-4">أهلاً بك في كويز برو الذكي!</h2>
-            <p className="text-indigo-100 font-bold mb-8">حول أي ملف دراسي إلى اختبار تفاعلي في ثوانٍ معدودة.</p>
-            <button onClick={() => navigate('/create')} className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black shadow-xl hover:scale-105 transition-all">ابدأ التوليد الآن ✨</button>
-          </div>
-          <div className="absolute -bottom-10 -right-10 text-9xl opacity-20 group-hover:rotate-12 transition-transform">📚</div>
-        </Card>
-      </div>
+      <Card className="bg-gradient-to-br from-indigo-600 to-indigo-800 text-white relative overflow-hidden group">
+        <div className="relative z-10 p-4">
+          <h2 className="text-3xl font-black mb-4">أهلاً بك في كويز برو!</h2>
+          <p className="text-indigo-100 font-bold mb-8">حول ملفاتك الدراسية إلى اختبارات ذكية فوراً.</p>
+          <button onClick={() => navigate('/create')} className="px-10 py-5 bg-white text-indigo-600 rounded-2xl font-black shadow-2xl hover:scale-105 transition-all">بدء توليد جديد ✨</button>
+        </div>
+        <div className="absolute -bottom-10 -right-10 text-9xl opacity-20 group-hover:rotate-12 transition-transform">🎓</div>
+      </Card>
 
       <Card>
-        <h3 className="text-xl font-black mb-6 flex items-center gap-2">📂 مكتبة اختباراتي</h3>
+        <h3 className="text-xl font-black mb-6 flex items-center gap-2">📂 اختباراتي</h3>
         {quizzes.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {quizzes.map((q: Quiz) => (
-              <div key={q.id} className="p-5 border rounded-3xl bg-slate-50 hover:bg-white hover:shadow-lg transition-all flex flex-col justify-between border-slate-100 group">
-                <div>
-                   <div className="flex justify-between items-start mb-2">
-                     <span className="text-[10px] font-black uppercase px-2 py-1 bg-white rounded-lg border">{strings[q.difficulty as keyof typeof strings]}</span>
-                     <button onClick={() => handleShare(q)} className="text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">🔗</button>
-                   </div>
-                   <h4 className="font-black text-slate-800 line-clamp-2">{q.title}</h4>
+              <div key={q.id} className="p-5 border rounded-3xl bg-slate-50 hover:bg-white hover:shadow-lg transition-all border-slate-100">
+                <div className="mb-4">
+                   <span className="text-[10px] font-black uppercase px-2 py-1 bg-white rounded-lg border">{strings[q.difficulty as keyof typeof strings]}</span>
+                   <h4 className="font-black text-slate-800 mt-2 line-clamp-1">{q.title}</h4>
                 </div>
-                <button onClick={() => navigate(`/quiz/${q.id}`)} className="mt-4 py-3 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-colors">دخول الاختبار</button>
+                <button onClick={() => navigate(`/quiz/${q.id}`)} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-colors">ابدأ الآن</button>
               </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-12 text-slate-400 font-bold italic">لا توجد اختبارات محفوظة.. ابدأ برفع أول ملف لك!</div>
+          <div className="text-center py-12 text-slate-400 font-bold italic">لا توجد اختبارات.. ارفع ملفاً للبدء!</div>
         )}
       </Card>
     </div>
@@ -147,15 +146,25 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes }: any) => {
 
   const handleGenerate = async () => {
     if (!files.length) return alert("الرجاء رفع ملف أولاً");
+
+    // التحقق من وجود مفتاح API
+    if (window.aistudio) {
+      const hasKey = await window.aistudio.hasSelectedApiKey();
+      if (!hasKey) {
+        alert("يرجى اختيار مفتاح API أولاً من النافذة التي ستظهر الآن.");
+        await window.aistudio.openSelectKey();
+        // نستكمل العمل مباشرة بعد استدعاء openSelectKey كما تنص التعليمات
+      }
+    }
     
     setLoading(true);
-    setLoadingStatus("جاري قراءة الملف...");
+    setLoadingStatus("جاري استخراج النص من الملف...");
     
     try {
       const content = await extractTextFromFiles(files);
       
-      if (!content || content.length < 20) {
-        throw new Error("لم يتم العثور على نص كافٍ في الملف. تأكد أن الملف يحتوي على نصوص مقروءة.");
+      if (!content || content.length < 10) {
+        throw new Error("لم نتمكن من العثور على نص في الملف. تأكد أن الملف يحتوي على نصوص وليس صوراً فقط.");
       }
       
       setLoadingStatus("الذكاء الاصطناعي يقوم بالتوليد...");
@@ -175,15 +184,12 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes }: any) => {
       navigate(`/quiz/${newQuiz.id}`);
     } catch (e: any) {
       console.error(e);
-      if (e.message === "API_KEY_ERROR") {
-        // إذا كان هناك خطأ في المفتاح، نفتح نافذة الاختيار فوراً
-        if (window.aistudio) {
-          await window.aistudio.openSelectKey();
-        } else {
-          alert("يرجى التأكد من إعداد مفتاح API صالح.");
-        }
+      // معالجة خطأ الـ SDK الشهير "An API Key must be set"
+      if (e.message.includes("API Key must be set") || e.message === "API_KEY_ERROR") {
+        alert("يجب إعداد مفتاح API. سيتم فتح نافذة الإعداد الآن.");
+        if (window.aistudio) await window.aistudio.openSelectKey();
       } else {
-        alert(e.message || "حدث خطأ غير متوقع.");
+        alert(e.message || "حدث خطأ غير متوقع أثناء التوليد.");
       }
     } finally {
       setLoading(false);
@@ -202,13 +208,13 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes }: any) => {
               <input type="file" multiple accept=".pdf,.txt" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setFiles(Array.from(e.target.files || []))} />
               <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">📄</div>
               <p className="font-black text-slate-600">{files.length > 0 ? `${files.length} ملفات جاهزة` : strings.uploadFiles}</p>
-              <p className="text-[10px] text-slate-400 mt-2">PDF أو نصوص فقط</p>
+              <p className="text-[10px] text-slate-400 mt-2">يدعم PDF و TXT</p>
             </div>
           </div>
 
           <div className="space-y-6">
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase">الصعوبة</label>
+              <label className="text-xs font-black text-slate-400 uppercase">مستوى الصعوبة</label>
               <div className="grid grid-cols-2 gap-2">
                 {[Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD, Difficulty.VERY_HARD].map(d => (
                   <button key={d} onClick={() => setDiff(d)} className={`py-3 rounded-xl font-bold text-[10px] transition-all ${diff === d ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>
@@ -220,11 +226,11 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes }: any) => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase">العدد</label>
+                <label className="text-xs font-black text-slate-400 uppercase">عدد الأسئلة</label>
                 <input type="number" value={count} onChange={e => setCount(Math.min(50, Math.max(1, Number(e.target.value))))} className="w-full p-3 bg-slate-50 rounded-xl font-black text-center border-none outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase">النوع</label>
+                <label className="text-xs font-black text-slate-400 uppercase">نوع السؤال</label>
                 <select value={type} onChange={e => setType(e.target.value as any)} className="w-full p-3 bg-slate-50 rounded-xl font-black text-xs border-none outline-none">
                   <option value={QuestionType.MCQ}>{strings.mcq}</option>
                   <option value={QuestionType.TRUE_FALSE}>{strings.tf}</option>
@@ -238,14 +244,14 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes }: any) => {
         <button 
           onClick={handleGenerate} 
           disabled={loading || files.length === 0} 
-          className="w-full mt-10 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl shadow-xl hover:bg-indigo-700 disabled:opacity-50 transition-all active:scale-95 flex flex-col items-center justify-center"
+          className="w-full mt-10 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl shadow-xl hover:bg-indigo-700 disabled:opacity-50 transition-all flex flex-col items-center justify-center"
         >
           {loading ? (
-            <>
+            <div className="flex flex-col items-center">
               <span className="animate-pulse">{loadingStatus}</span>
-              <span className="text-[10px] font-normal opacity-70 mt-1">يتم التوليد بواسطة Gemini 3 الذكي</span>
-            </>
-          ) : "ابدأ التوليد السحري ✨"}
+              <span className="text-[10px] font-normal opacity-70 mt-1 italic">نستخدم Gemini 3 لإخراج أفضل النتائج</span>
+            </div>
+          ) : "توليد الأسئلة الآن ✨"}
         </button>
       </Card>
     </div>
@@ -296,10 +302,10 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
           <div className="text-7xl mb-6">🏆</div>
           <h2 className="text-4xl font-black mb-8 text-slate-800">{strings.results}</h2>
           <div className="grid grid-cols-2 gap-6 mb-10">
-            <div className="p-6 bg-slate-50 rounded-3xl"><p className="text-5xl font-black text-indigo-600">{score}/{quiz.questions.length}</p><p className="text-slate-400 font-bold text-xs mt-2">{strings.score}</p></div>
+            <div className="p-6 bg-slate-50 rounded-3xl"><p className="text-5xl font-black text-indigo-600">{score}/{quiz.questions.length}</p><p className="text-slate-400 font-bold text-xs mt-2">النتيجة</p></div>
             <div className="p-6 bg-slate-50 rounded-3xl"><p className="text-5xl font-black text-indigo-600">{Math.round((Date.now()-start)/1000)}ث</p><p className="text-slate-400 font-bold text-xs mt-2">الوقت</p></div>
           </div>
-          <button onClick={() => navigate('/')} className="px-12 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl shadow-xl hover:scale-105 active:scale-95 transition-all">العودة للرئيسية</button>
+          <button onClick={() => navigate('/')} className="px-12 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl shadow-xl hover:scale-105 transition-all">العودة للرئيسية</button>
         </Card>
       </div>
     );
@@ -309,11 +315,11 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
     <div className="max-w-4xl mx-auto pb-20">
       <div className="mb-8 sticky top-20 z-40 bg-slate-50/90 backdrop-blur-md py-4 px-2">
         <div className="flex justify-between items-center font-black text-xs text-indigo-600 mb-2 px-2">
-          <span>{cur+1} / {quiz.questions.length}</span>
-          <span className="bg-indigo-100 px-3 py-1 rounded-full">{strings[quiz.difficulty as keyof typeof strings]}</span>
+          <span>سؤال {cur+1} / {quiz.questions.length}</span>
+          <span className="bg-indigo-100 px-3 py-1 rounded-full uppercase">{strings[quiz.difficulty as keyof typeof strings]}</span>
           <span>{Math.round(progress)}%</span>
         </div>
-        <div className="w-full h-2 bg-white rounded-full overflow-hidden shadow-inner">
+        <div className="w-full h-2 bg-white rounded-full overflow-hidden shadow-inner border border-slate-200">
           <div className="h-full bg-indigo-600 transition-all duration-500" style={{width: `${progress}%`}} />
         </div>
       </div>
@@ -363,46 +369,22 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
   );
 };
 
-const ImportQuiz = ({ quizzes, setQuizzes }: any) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const data = params.get('data');
-    if (data) {
-      const decoded = decodeQuiz(data);
-      if (decoded) {
-        if (!quizzes.find((q: any) => q.id === decoded.id)) {
-          setQuizzes((prev: any) => [...prev, decoded]);
-        }
-        navigate(`/quiz/${decoded.id}`);
-      } else {
-        alert("الرابط تالف!");
-        navigate('/');
-      }
-    }
-  }, [location, navigate, quizzes, setQuizzes]);
-
-  return <div className="text-center py-24 font-black text-indigo-600 animate-pulse">جاري استيراد الاختبار...</div>;
-};
-
 /** --- Main App --- */
 
 const App = () => {
   const [lang, setLang] = useState<'en' | 'ar'>('ar');
   const [user] = useState({ id: 'anon', name: 'مستخدم مجهول', photo: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', isLoggedIn: true });
   const [quizzes, setQuizzes] = useState<Quiz[]>(() => {
-    const q = localStorage.getItem('mq_quizzes_v2');
+    const q = localStorage.getItem('mq_quizzes_v3');
     return q ? JSON.parse(q) : [];
   });
   const [attempts, setAttempts] = useState<QuizAttempt[]>(() => {
-    const a = localStorage.getItem('mq_attempts_v2');
+    const a = localStorage.getItem('mq_attempts_v3');
     return a ? JSON.parse(a) : [];
   });
 
-  useEffect(() => localStorage.setItem('mq_quizzes_v2', JSON.stringify(quizzes)), [quizzes]);
-  useEffect(() => localStorage.setItem('mq_attempts_v2', JSON.stringify(attempts)), [attempts]);
+  useEffect(() => localStorage.setItem('mq_quizzes_v3', JSON.stringify(quizzes)), [quizzes]);
+  useEffect(() => localStorage.setItem('mq_attempts_v3', JSON.stringify(attempts)), [attempts]);
 
   return (
     <Router>
@@ -413,7 +395,6 @@ const App = () => {
             <Route path="/" element={<Dashboard strings={TRANSLATIONS[lang]} attempts={attempts} quizzes={quizzes} lang={lang} user={user} />} />
             <Route path="/create" element={<CreateQuiz strings={TRANSLATIONS[lang]} quizzes={quizzes} setQuizzes={setQuizzes} />} />
             <Route path="/quiz/:quizId" element={<QuizInterface strings={TRANSLATIONS[lang]} setAttempts={setAttempts} quizzes={quizzes} user={user} />} />
-            <Route path="/import" element={<ImportQuiz quizzes={quizzes} setQuizzes={setQuizzes} />} />
             <Route path="*" element={<div className="text-center py-20 font-black">الصفحة غير موجودة!</div>} />
           </Routes>
         </main>
