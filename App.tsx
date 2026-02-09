@@ -10,6 +10,14 @@ import { GoogleGenAI, Type } from "@google/genai";
 enum Difficulty { EASY = 'easy', MEDIUM = 'medium', HARD = 'hard' }
 enum QuestionType { MCQ = 'mcq', TRUE_FALSE = 'true_false', MIX = 'mix' }
 
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  photo: string;
+  isLoggedIn: boolean;
+}
+
 interface Question {
   id: string;
   text: string;
@@ -29,8 +37,7 @@ interface Quiz {
   createdAt: number;
 }
 
-interface Chapter { id: string; name: string; }
-interface Subject { id: string; name: string; chapters: Chapter[]; }
+interface Subject { id: string; name: string; chapters: {id: string, name: string}[]; }
 interface QuizAttempt {
   id: string; quizId: string; userId: string; userName: string;
   score: number; totalQuestions: number; timeSpent: number; date: number;
@@ -44,7 +51,8 @@ const TRANSLATIONS = {
     mcq: 'MCQ', tf: 'True/False', mix: 'Mixed Mode', questionCount: 'Qty',
     results: 'Medical Report', share: 'Copy Link', score: 'Final Score',
     time: 'Duration', translate: 'Output Language', toArabic: 'Arabic',
-    toEnglish: 'English', original: 'Source Lang', next: 'Next Step', finish: 'Complete'
+    toEnglish: 'English', original: 'Source Lang', next: 'Next Step', finish: 'Complete',
+    back: 'Back', login: 'Sign in with Google', logout: 'Logout', welcome: 'Welcome, Dr.'
   },
   ar: {
     title: 'أكاديمية الاختبارات الطبية', uploadFiles: 'رفع المحتوى الطبي', generateQuiz: 'إنشاء الاختبار بالذكاء الاصطناعي',
@@ -53,7 +61,8 @@ const TRANSLATIONS = {
     mcq: 'اختيار من متعدد', tf: 'صح وخطأ', mix: 'نمط مختلط', questionCount: 'العدد',
     results: 'التقرير الطبي للنتائج', share: 'نسخ رابط الاختبار', score: 'الدرجة النهائية',
     time: 'الوقت المستغرق', translate: 'لغة الأسئلة', toArabic: 'العربية',
-    toEnglish: 'الإنجليزية', original: 'نفس لغة المصدر', next: 'السؤال التالي', finish: 'إنهاء الاختبار'
+    toEnglish: 'الإنجليزية', original: 'نفس لغة المصدر', next: 'السؤال التالي', finish: 'إنهاء الاختبار',
+    back: 'رجوع', login: 'تسجيل الدخول بجوجل', logout: 'خروج', welcome: 'مرحباً دكتور'
   }
 };
 
@@ -63,54 +72,66 @@ const generateQuestionsAI = async (
   difficulty: Difficulty, lang: string
 ): Promise<Question[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-  
-  const prompt = `You are a Senior Medical Examiner. Create ${count} ${difficulty} level ${type} questions based on the provided medical text.
-    Target Language: ${lang === 'original' ? 'Same as source' : lang}.
-    Ensure absolute medical accuracy.
-    Format your response as a JSON array of objects with fields: id, text, options (array of 4 if MCQ, 2 if T/F), correctAnswer (must match one option exactly), explanation (deep clinical insight).
-    Text: ${content.substring(0, 40000)}`;
+  const prompt = `Medical Professor Mode: Generate ${count} ${difficulty} level ${type} questions. 
+    Target Language: ${lang === 'original' ? 'Same as source' : lang}. 
+    Output JSON: [{id, text, options, correctAnswer, explanation}].
+    Text: ${content.substring(0, 30000)}`;
 
-  try {
-    const res = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              text: { type: Type.STRING },
-              options: { type: Type.ARRAY, items: { type: Type.STRING } },
-              correctAnswer: { type: Type.STRING },
-              explanation: { type: Type.STRING }
-            },
-            required: ["id", "text", "correctAnswer", "explanation"]
-          }
-        }
-      }
-    });
-    return JSON.parse(res.text || '[]');
-  } catch (e) {
-    console.error("AI Error:", e);
-    throw e;
-  }
+  const res = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: prompt,
+    config: { responseMimeType: "application/json" }
+  });
+  return JSON.parse(res.text || '[]');
 };
 
 /** --- المكونات الفرعية --- */
 
-const Navbar = ({ lang, setLang, strings }: any) => {
+const Navbar = ({ lang, setLang, strings, user, onLogin, onLogout }: any) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const showBack = location.pathname !== '/';
+
   return (
-    <nav className={`bg-white/80 backdrop-blur-md shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-50 border-b border-indigo-50 ${lang === 'ar' ? 'rtl' : ''}`}>
-      <h1 onClick={() => navigate('/')} className="text-2xl font-black text-indigo-600 cursor-pointer flex items-center gap-2 hover:opacity-80 transition-all">
-        <span className="text-3xl">⚕️</span> {strings.title}
-      </h1>
-      <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="px-6 py-2 bg-indigo-600 text-white rounded-full font-bold text-sm shadow-lg shadow-indigo-100 transition-transform active:scale-95">
-        {lang === 'en' ? 'العربية' : 'English'}
-      </button>
+    <nav className={`bg-white/90 backdrop-blur-lg shadow-sm px-4 md:px-8 py-4 flex justify-between items-center sticky top-0 z-50 border-b border-indigo-50 ${lang === 'ar' ? 'rtl' : ''}`}>
+      <div className="flex items-center gap-4">
+        {showBack && (
+          <button 
+            onClick={() => navigate(-1)} 
+            className="w-10 h-10 flex items-center justify-center bg-slate-100 rounded-full hover:bg-indigo-100 text-indigo-600 transition-colors"
+          >
+            {lang === 'ar' ? '←' : '←'}
+          </button>
+        )}
+        <h1 onClick={() => navigate('/')} className="text-xl md:text-2xl font-black text-indigo-600 cursor-pointer flex items-center gap-2">
+          <span className="text-3xl">⚕️</span> <span className="hidden sm:inline">{strings.title}</span>
+        </h1>
+      </div>
+
+      <div className="flex items-center gap-3 md:gap-6">
+        <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors">
+          {lang === 'en' ? 'العربية' : 'English'}
+        </button>
+
+        {user.isLoggedIn ? (
+          <div className="flex items-center gap-3 pl-4 border-l border-slate-100">
+            <div className="text-right hidden sm:block">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{strings.welcome}</p>
+              <p className="text-xs font-bold text-slate-700">{user.name}</p>
+            </div>
+            <img src={user.photo} className="w-10 h-10 rounded-full border-2 border-indigo-200" alt="profile" />
+            <button onClick={onLogout} className="text-[10px] font-black text-rose-500 uppercase">{strings.logout}</button>
+          </div>
+        ) : (
+          <button 
+            onClick={onLogin} 
+            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-full text-xs font-black shadow-sm hover:shadow-md transition-all active:scale-95"
+          >
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-4 h-4" alt="google" />
+            {strings.login}
+          </button>
+        )}
+      </div>
     </nav>
   );
 };
@@ -121,9 +142,9 @@ const Card = ({ children, className = "" }: any) => (
   </div>
 );
 
-/** --- الواجهات الأساسية --- */
+/** --- الواجهات --- */
 
-const Dashboard = ({ strings, subjects, setSubjects, attempts, lang }: any) => {
+const Dashboard = ({ strings, subjects, setSubjects, attempts, user }: any) => {
   const navigate = useNavigate();
   const [newSub, setNewSub] = useState('');
 
@@ -146,12 +167,12 @@ const Dashboard = ({ strings, subjects, setSubjects, attempts, lang }: any) => {
             <input 
               value={newSub} 
               onChange={e => setNewSub(e.target.value)} 
-              className="flex-1 px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" 
-              placeholder="اسم المادة..." 
+              className="flex-1 px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
+              placeholder="..." 
             />
-            <button onClick={addSub} className="w-12 h-12 bg-indigo-600 text-white rounded-2xl font-bold flex items-center justify-center text-xl">+</button>
+            <button onClick={addSub} className="w-12 h-12 bg-indigo-600 text-white rounded-2xl font-bold">+</button>
           </div>
-          <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
+          <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
             {subjects.map((s: any) => (
               <div key={s.id} className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center group hover:bg-indigo-50 transition-colors">
                 <span className="font-bold text-slate-700">{s.name}</span>
@@ -176,13 +197,10 @@ const Dashboard = ({ strings, subjects, setSubjects, attempts, lang }: any) => {
           <StatCard label="وقت المذاكرة" value={attempts.reduce((a:any, b:any) => a + b.timeSpent, 0) + ' د'} icon="⏱️" color="bg-amber-500" />
         </div>
         
-        <Card className="p-10">
-          <h2 className="text-2xl font-black mb-8 flex items-center gap-3">🚀 اختصارات سريعة</h2>
-          <div className="grid grid-cols-2 gap-6">
-            <NavBtn onClick={() => navigate('/stats')} icon="📊" label={strings.stats} />
-            <NavBtn onClick={() => navigate('/leaderboard')} icon="🏆" label={strings.leaderboard} />
-          </div>
-        </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <NavBtn onClick={() => navigate('/stats')} icon="📊" label={strings.stats} />
+          <NavBtn onClick={() => navigate('/leaderboard')} icon="🏆" label={strings.leaderboard} />
+        </div>
       </div>
     </div>
   );
@@ -199,7 +217,7 @@ const StatCard = ({ label, value, icon, color }: any) => (
 );
 
 const NavBtn = ({ onClick, icon, label }: any) => (
-  <button onClick={onClick} className="p-10 border-2 border-slate-50 rounded-[2.5rem] hover:border-indigo-100 hover:bg-indigo-50 transition-all flex flex-col items-center gap-4 group">
+  <button onClick={onClick} className="p-10 bg-white border border-slate-100 rounded-[2.5rem] shadow-sm hover:shadow-md hover:bg-indigo-50 transition-all flex flex-col items-center gap-4 group">
     <span className="text-4xl group-hover:scale-125 transition-transform">{icon}</span>
     <span className="font-black text-slate-700">{label}</span>
   </button>
@@ -240,8 +258,9 @@ const CreateQuiz = ({ strings, subjects, lang }: any) => {
 
   return (
     <div className="max-w-4xl mx-auto animate-in zoom-in duration-500">
-      <Card className="p-12 !rounded-[3rem] shadow-2xl">
+      <Card className="p-12 !rounded-[3rem] shadow-2xl relative">
         <h2 className="text-3xl font-black text-center mb-12 text-slate-800">{strings.generateQuiz}</h2>
+        
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           <div className="space-y-8">
             <div className="border-4 border-dashed border-indigo-100 rounded-[2rem] p-12 text-center bg-indigo-50/20 hover:bg-indigo-50 transition-all cursor-pointer relative group">
@@ -250,46 +269,68 @@ const CreateQuiz = ({ strings, subjects, lang }: any) => {
               <p className="font-black text-indigo-600 text-lg">{strings.uploadFiles}</p>
               <p className="text-xs text-slate-400 mt-2 font-bold">{files.length} ملفات جاهزة</p>
             </div>
-            <select value={subId} onChange={e => setSubId(e.target.value)} className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none font-bold text-slate-600 appearance-none shadow-inner">
-              {subjects.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest">{strings.subjects}</label>
+              <select value={subId} onChange={e => setSubId(e.target.value)} className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none font-bold text-slate-600 appearance-none shadow-inner">
+                {subjects.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
           </div>
 
           <div className="space-y-8">
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest">{strings.difficulty}</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD].map((d) => (
+                  <button 
+                    key={d} 
+                    onClick={() => setDiff(d)}
+                    className={`py-3 rounded-xl font-black text-[10px] uppercase transition-all ${diff === d ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                  >
+                    {d === Difficulty.EASY ? strings.easy : d === Difficulty.MEDIUM ? strings.medium : strings.hard}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
-              <select value={diff} onChange={e => setDiff(e.target.value as any)} className="p-5 bg-slate-50 rounded-2xl font-bold border-none outline-none text-slate-600">
-                <option value={Difficulty.EASY}>{strings.easy}</option>
-                <option value={Difficulty.MEDIUM}>{strings.medium}</option>
-                <option value={Difficulty.HARD}>{strings.hard}</option>
-              </select>
-              <select value={type} onChange={e => setType(e.target.value as any)} className="p-5 bg-slate-50 rounded-2xl font-bold border-none outline-none text-slate-600">
-                <option value={QuestionType.MCQ}>{strings.mcq}</option>
-                <option value={QuestionType.TRUE_FALSE}>{strings.tf}</option>
-                <option value={QuestionType.MIX}>{strings.mix}</option>
-              </select>
+              <div className="space-y-3">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Question Type</label>
+                <select value={type} onChange={e => setType(e.target.value as any)} className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none outline-none text-slate-600">
+                  <option value={QuestionType.MCQ}>{strings.mcq}</option>
+                  <option value={QuestionType.TRUE_FALSE}>{strings.tf}</option>
+                  <option value={QuestionType.MIX}>{strings.mix}</option>
+                </select>
+              </div>
+              <div className="space-y-3">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">{strings.questionCount}</label>
+                <input type="number" value={count} onChange={e => setCount(Math.min(200, Number(e.target.value)))} className="w-full bg-slate-50 p-4 font-black text-center text-xl rounded-2xl outline-none" />
+              </div>
             </div>
-            <div className="flex items-center gap-4 bg-slate-50 p-2 rounded-2xl">
-               <span className="px-4 font-black text-slate-400">#</span>
-               <input type="number" value={count} onChange={e => setCount(Math.min(200, Number(e.target.value)))} className="flex-1 bg-transparent p-3 font-black text-center text-2xl outline-none" />
-            </div>
-            <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
-              {['original', 'ar', 'en'].map(l => (
-                <button key={l} onClick={() => setTargetLang(l)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${targetLang === l ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>
-                  {l === 'original' ? strings.original : l === 'ar' ? strings.toArabic : strings.toEnglish}
-                </button>
-              ))}
+
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest">{strings.translate}</label>
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
+                {['original', 'ar', 'en'].map(l => (
+                  <button key={l} onClick={() => setTargetLang(l)} className={`flex-1 py-3 rounded-xl font-bold text-[10px] uppercase transition-all ${targetLang === l ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>
+                    {l === 'original' ? strings.original : l === 'ar' ? strings.toArabic : strings.toEnglish}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
+        
         <button onClick={handleGenerate} disabled={loading} className="w-full mt-12 py-6 bg-indigo-600 text-white rounded-[2rem] font-black text-2xl shadow-xl shadow-indigo-100 active:scale-95 disabled:opacity-50 transition-all">
-          {loading ? 'الذكاء الاصطناعي يقوم بتحليل المادة...' : strings.generateQuiz}
+          {loading ? 'ANALYZING MEDICAL DATA...' : strings.generateQuiz}
         </button>
       </Card>
     </div>
   );
 };
 
-const QuizInterface = ({ strings, lang, setAttempts }: any) => {
+const QuizInterface = ({ strings, lang, setAttempts, user }: any) => {
   const { quizId } = useParams();
   const navigate = useNavigate();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -322,7 +363,7 @@ const QuizInterface = ({ strings, lang, setAttempts }: any) => {
     else {
       const score = quiz.questions.reduce((a, q) => a + (ans[q.id] === q.correctAnswer ? 1 : 0), 0);
       const attempt: QuizAttempt = {
-        id: Date.now().toString(), quizId: quiz.id, userId: 'user', userName: 'طبيب متميز',
+        id: Date.now().toString(), quizId: quiz.id, userId: user.id, userName: user.name,
         score, totalQuestions: quiz.questions.length, timeSpent: Math.round((Date.now() - start)/60000), date: Date.now()
       };
       setAttempts((p:any) => [...p, attempt]);
@@ -339,7 +380,7 @@ const QuizInterface = ({ strings, lang, setAttempts }: any) => {
           <h2 className="text-4xl font-black mb-10 text-slate-800">{strings.results}</h2>
           <div className="flex justify-center gap-16 mb-12">
             <div><p className="text-6xl font-black text-indigo-600">{score}/{quiz.questions.length}</p><p className="text-slate-400 font-bold uppercase text-xs tracking-widest">{strings.score}</p></div>
-            <div><p className="text-6xl font-black text-indigo-600">{Math.round((Date.now()-start)/1000)}ث</p><p className="text-slate-400 font-bold uppercase text-xs tracking-widest">{strings.time}</p></div>
+            <div><p className="text-6xl font-black text-indigo-600">{Math.round((Date.now()-start)/1000)}s</p><p className="text-slate-400 font-bold uppercase text-xs tracking-widest">{strings.time}</p></div>
           </div>
           <button onClick={() => navigate('/')} className="px-12 py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-xl shadow-2xl hover:scale-105 active:scale-95 transition-all">العودة للرئيسية</button>
         </Card>
@@ -351,7 +392,8 @@ const QuizInterface = ({ strings, lang, setAttempts }: any) => {
     <div className="max-w-4xl mx-auto pb-20">
       <div className="mb-12 sticky top-24 z-40 bg-slate-50/80 backdrop-blur px-2 py-4">
         <div className="flex justify-between font-black text-xs text-indigo-600 mb-3">
-          <span>السؤال {cur+1} من {quiz.questions.length}</span>
+          <span>Question {cur+1} / {quiz.questions.length}</span>
+          <span className="bg-indigo-100 px-2 py-0.5 rounded text-[10px] uppercase">{quiz.difficulty}</span>
           <span>{Math.round(progress)}%</span>
         </div>
         <div className="w-full h-4 bg-white rounded-full overflow-hidden shadow-inner border border-slate-100">
@@ -397,7 +439,7 @@ const QuizInterface = ({ strings, lang, setAttempts }: any) => {
         )}
 
         <div className="mt-16 flex justify-between items-center">
-          <button onClick={() => navigate('/')} className="text-slate-400 font-black hover:text-rose-500 transition-colors">إلغاء الاختبار</button>
+          <button onClick={() => navigate('/')} className="text-slate-400 font-black hover:text-rose-500 transition-colors uppercase text-xs tracking-widest">End Session</button>
           <button 
             onClick={onNext} 
             disabled={!ans[current.id]} 
@@ -412,8 +454,6 @@ const QuizInterface = ({ strings, lang, setAttempts }: any) => {
   );
 };
 
-/** --- المخططات والإحصائيات --- */
-
 const StatsView = ({ attempts }: any) => {
   const data = useMemo(() => attempts.slice(-10).map((a:any, i:number) => ({ 
     name: `T${i+1}`, 
@@ -423,7 +463,7 @@ const StatsView = ({ attempts }: any) => {
   return (
     <div className="max-w-5xl mx-auto space-y-10 animate-in fade-in duration-700">
       <Card className="p-12 !rounded-[3rem]">
-        <h2 className="text-3xl font-black mb-10 text-slate-800">منحنى التطور الأكاديمي</h2>
+        <h2 className="text-3xl font-black mb-10 text-slate-800">Learning Curve</h2>
         <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data}>
@@ -440,26 +480,6 @@ const StatsView = ({ attempts }: any) => {
           </ResponsiveContainer>
         </div>
       </Card>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <Card className="p-8">
-           <h3 className="text-xl font-black mb-6">أحدث الاختبارات</h3>
-           <div className="space-y-4">
-             {attempts.slice(-5).reverse().map((a:any) => (
-               <div key={a.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="font-bold text-slate-500">{new Date(a.date).toLocaleDateString()}</span>
-                  <span className="font-black text-indigo-600 text-lg">{a.score}/{a.totalQuestions}</span>
-               </div>
-             ))}
-           </div>
-        </Card>
-        <Card className="p-8 bg-indigo-600 text-white">
-           <h3 className="text-xl font-black mb-6">نصيحة الطبيب الذكي</h3>
-           <p className="font-bold opacity-90 leading-relaxed italic text-lg">
-             "بناءً على نتائجك الأخيرة، نوصيك بالتركيز أكثر على الحالات الإكلينيكية المرتبطة بالفيزيولوجيا المرضية لزيادة دقتك في التشخيص التفريقي."
-           </p>
-        </Card>
-      </div>
     </div>
   );
 };
@@ -467,28 +487,25 @@ const StatsView = ({ attempts }: any) => {
 const Leaderboard = ({ attempts }: any) => {
   const board = useMemo(() => {
     const mocks = [
-      { id: '1', userName: 'د. سارة المنصور', score: 19, totalQuestions: 20, date: Date.now() },
-      { id: '2', userName: 'د. خالد اليوسف', score: 17, totalQuestions: 20, date: Date.now() },
+      { id: '1', userName: 'Dr. Sarah Al-Fahd', score: 19, totalQuestions: 20, date: Date.now() },
+      { id: '2', userName: 'Dr. John Doe', score: 17, totalQuestions: 20, date: Date.now() },
     ];
-    const all = [...attempts, ...mocks].sort((a,b) => (b.score/b.totalQuestions)-(a.score/a.totalQuestions)).slice(0, 10);
-    return all;
+    return [...attempts, ...mocks].sort((a,b) => (b.score/b.totalQuestions)-(a.score/a.totalQuestions)).slice(0, 10);
   }, [attempts]);
 
   return (
-    <div className="max-w-2xl mx-auto bg-white rounded-[4rem] shadow-2xl overflow-hidden border border-slate-50 animate-in slide-in-from-bottom-10 duration-700">
+    <div className="max-w-2xl mx-auto bg-white rounded-[4rem] shadow-2xl overflow-hidden border border-slate-50">
       <div className="bg-gradient-to-br from-indigo-600 to-indigo-900 p-14 text-white text-center">
         <div className="text-6xl mb-4">🏆</div>
-        <h2 className="text-4xl font-black">نخبة الأطباء</h2>
-        <p className="opacity-70 font-bold mt-2 uppercase tracking-widest text-xs">أفضل النتائج لهذا الأسبوع</p>
+        <h2 className="text-4xl font-black">Medical Excellence</h2>
       </div>
       <div className="p-10 space-y-4 bg-slate-50/50">
         {board.map((item, idx) => (
           <div key={item.id} className={`flex items-center gap-6 p-6 rounded-[2.5rem] transition-all ${idx === 0 ? 'bg-indigo-600 text-white shadow-2xl scale-105' : 'bg-white text-slate-800'}`}>
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl ${idx === 0 ? 'bg-white/20' : idx === 1 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'}`}>{idx+1}</div>
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl ${idx === 0 ? 'bg-white/20' : 'bg-slate-100 text-slate-400'}`}>{idx+1}</div>
             <div className="flex-1 font-black text-lg">{item.userName}</div>
             <div className="text-right">
               <p className="text-2xl font-black">{Math.round((item.score/item.totalQuestions)*100)}%</p>
-              <p className="text-[10px] font-bold opacity-50">{item.score}/{item.totalQuestions}</p>
             </div>
           </div>
         ))}
@@ -501,36 +518,52 @@ const Leaderboard = ({ attempts }: any) => {
 
 const App = () => {
   const [lang, setLang] = useState<'en' | 'ar'>('ar');
-  const [subjects, setSubjects] = useState<Subject[]>(() => {
-    try {
-      const s = localStorage.getItem('mq_subjects');
-      return s ? JSON.parse(s) : [
-        { id: '1', name: 'Internal Medicine', chapters: [] },
-        { id: '2', name: 'Cardiology', chapters: [] }
-      ];
-    } catch { return []; }
+  const [user, setUser] = useState<User>(() => {
+    const saved = localStorage.getItem('mq_user');
+    return saved ? JSON.parse(saved) : { id: 'anon', name: 'Anonymous', email: '', photo: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', isLoggedIn: false };
   });
+
+  const [subjects, setSubjects] = useState<Subject[]>(() => {
+    const s = localStorage.getItem('mq_subjects');
+    return s ? JSON.parse(s) : [{ id: '1', name: 'Internal Medicine', chapters: [] }];
+  });
+
   const [attempts, setAttempts] = useState<QuizAttempt[]>(() => {
-    try {
-      const a = localStorage.getItem('mq_attempts');
-      return a ? JSON.parse(a) : [];
-    } catch { return []; }
+    const a = localStorage.getItem('mq_attempts');
+    return a ? JSON.parse(a) : [];
   });
 
   const strings = TRANSLATIONS[lang];
 
   useEffect(() => localStorage.setItem('mq_subjects', JSON.stringify(subjects)), [subjects]);
   useEffect(() => localStorage.setItem('mq_attempts', JSON.stringify(attempts)), [attempts]);
+  useEffect(() => localStorage.setItem('mq_user', JSON.stringify(user)), [user]);
+
+  const handleLogin = () => {
+    // محاكاة تسجيل دخول جوجل
+    const mockUser = {
+      id: 'google-123',
+      name: 'د. عبدالله خالد',
+      email: 'dr.abdallah@gmail.com',
+      photo: 'https://i.pravatar.cc/150?u=google-123',
+      isLoggedIn: true
+    };
+    setUser(mockUser);
+  };
+
+  const handleLogout = () => {
+    setUser({ id: 'anon', name: 'Anonymous', email: '', photo: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', isLoggedIn: false });
+  };
 
   return (
     <Router>
-      <div className={`min-h-screen bg-slate-50 pb-20 overflow-x-hidden ${lang === 'ar' ? 'rtl' : ''}`}>
-        <Navbar lang={lang} setLang={setLang} strings={strings} />
+      <div className={`min-h-screen bg-slate-50 pb-20 ${lang === 'ar' ? 'rtl' : ''}`}>
+        <Navbar lang={lang} setLang={setLang} strings={strings} user={user} onLogin={handleLogin} onLogout={handleLogout} />
         <main className="container mx-auto px-6 py-12 max-w-7xl">
           <Routes>
-            <Route path="/" element={<Dashboard strings={strings} subjects={subjects} setSubjects={setSubjects} attempts={attempts} lang={lang} />} />
+            <Route path="/" element={<Dashboard strings={strings} subjects={subjects} setSubjects={setSubjects} attempts={attempts} user={user} lang={lang} />} />
             <Route path="/create" element={<CreateQuiz strings={strings} subjects={subjects} lang={lang} />} />
-            <Route path="/quiz/:quizId" element={<QuizInterface strings={strings} lang={lang} setAttempts={setAttempts} />} />
+            <Route path="/quiz/:quizId" element={<QuizInterface strings={strings} lang={lang} setAttempts={setAttempts} user={user} />} />
             <Route path="/stats" element={<StatsView attempts={attempts} />} />
             <Route path="/leaderboard" element={<Leaderboard attempts={attempts} />} />
           </Routes>
