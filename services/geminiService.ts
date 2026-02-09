@@ -9,32 +9,32 @@ export const generateQuizQuestions = async (
   difficulty: Difficulty,
   targetLanguage: 'en' | 'ar' | 'original'
 ): Promise<Question[]> => {
-  // إنشاء نسخة جديدة في كل مرة لضمان استخدام أحدث مفتاح API مفعل
+  // إنشاء مثيل جديد لضمان استخدام المفتاح المختار حالياً
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const difficultyInstruction = {
-    [Difficulty.EASY]: "Basic definitions and explicit facts from the text.",
-    [Difficulty.MEDIUM]: "Concepts, logic, and standard applications.",
-    [Difficulty.HARD]: "Deep analysis, subtle nuances, and multi-step deduction.",
-    [Difficulty.VERY_HARD]: "Expert level: Obscure details, synthesis of ideas, and highly complex inference-based questions."
+    [Difficulty.EASY]: "Focus on direct facts and basic definitions found in the text.",
+    [Difficulty.MEDIUM]: "Focus on concepts and logical applications of the information.",
+    [Difficulty.HARD]: "Focus on deep analysis, subtle nuances, and synthesis of ideas.",
+    [Difficulty.VERY_HARD]: "EXTREME CHALLENGE: Obscure details, lateral thinking, and highly complex inference-based questions for experts."
   }[difficulty];
 
   const prompt = `
-    Role: Senior Academic Examiner.
-    Task: Create exactly ${count} high-quality questions from the provided content.
-    Language: ${targetLanguage === 'original' ? 'Same as input' : (targetLanguage === 'ar' ? 'Arabic' : 'English')}.
-    Level: ${difficulty} (${difficultyInstruction}).
-    Type: ${type === 'mix' ? 'MCQ and True/False' : type.toUpperCase()}.
+    Role: World-Class Senior Academic Examiner.
+    Task: Generate exactly ${count} high-quality questions based on the provided content.
+    Language: ${targetLanguage === 'original' ? 'The same as input' : (targetLanguage === 'ar' ? 'Arabic' : 'English')}.
+    Difficulty: ${difficulty} (${difficultyInstruction}).
+    Question Type: ${type === 'mix' ? 'MCQ and True/False' : type.toUpperCase()}.
 
-    Rules:
-    1. Base questions ONLY on the provided content.
-    2. MCQ must have 4 plausible options.
+    Strict Requirements:
+    1. Questions must be derived ONLY from the provided text.
+    2. MCQ must have 4 distinct options.
     3. True/False must have 2 options.
-    4. Provide a detailed explanation for each answer.
+    4. Include a detailed "Explanation" for the correct answer.
     5. Return ONLY a valid JSON array.
 
-    CONTENT:
-    ${fileContent.substring(0, 32000)}
+    TEXT CONTENT:
+    ${fileContent.substring(0, 35000)}
   `;
 
   try {
@@ -61,9 +61,8 @@ export const generateQuizQuestions = async (
       }
     });
 
-    const resultText = response.text || '[]';
-    // تنظيف أي شوائب قد تظهر في النص (مثل علامات Markdown)
-    const cleanJson = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const result = response.text || '[]';
+    const cleanJson = result.replace(/```json/g, '').replace(/```/g, '').trim();
     const questions: any[] = JSON.parse(cleanJson);
     
     return questions.map((q, i) => ({
@@ -72,13 +71,13 @@ export const generateQuizQuestions = async (
       options: q.options || (q.type === 'true_false' ? (targetLanguage === 'ar' ? ['صح', 'خطأ'] : ['True', 'False']) : [])
     }));
   } catch (error: any) {
-    console.error("Gemini Generation Failure:", error);
+    console.error("Gemini API Error:", error);
     
-    // معالجة أخطاء مفتاح الـ API والـ Permissions
+    // إذا كان الخطأ بسبب المفتاح المفقود أو غير الصحيح
     if (error.message?.includes("Requested entity was not found") || error.message?.includes("API key")) {
-      throw new Error("حدث خطأ في مفتاح الـ API. يرجى التأكد من اختيار مفتاح صالح من الإعدادات.");
+      throw new Error("API_KEY_ERROR");
     }
     
-    throw new Error("فشل الذكاء الاصطناعي في توليد الأسئلة. تأكد من جودة النص المرفوع وحاول مرة أخرى.");
+    throw new Error("فشل الذكاء الاصطناعي في معالجة النص. حاول مرة أخرى أو استخدم ملفاً مختلفاً.");
   }
 };
