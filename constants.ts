@@ -1,0 +1,57 @@
+
+import { LanguageStrings } from './types';
+
+export const TRANSLATIONS: Record<'en' | 'ar', LanguageStrings> = {
+  en: {
+    title: 'Medicine Quiz',
+    uploadFiles: 'Upload Files (PDF/Text)',
+    generateQuiz: 'Generate Quiz',
+    subjects: 'Subjects',
+    chapters: 'Chapters',
+    stats: 'Statistics',
+    leaderboard: 'Leaderboard',
+    difficulty: 'Difficulty',
+    easy: 'Easy',
+    medium: 'Medium',
+    hard: 'Hard',
+    mcq: 'MCQ',
+    tf: 'True/False',
+    mix: 'Mix',
+    questionCount: 'Question Count',
+    startQuiz: 'Start Quiz',
+    results: 'Results',
+    share: 'Share Link',
+    score: 'Score',
+    time: 'Time Taken',
+    translate: 'Translate To',
+    toArabic: 'Arabic',
+    toEnglish: 'English',
+    original: 'Original'
+  },
+  ar: {
+    title: 'اختبار الطب',
+    uploadFiles: 'رفع الملفات (PDF/Text)',
+    generateQuiz: 'إنشاء الاختبار',
+    subjects: 'المواد',
+    chapters: 'الفصول',
+    stats: 'الإحصائيات',
+    leaderboard: 'لوحة المتصدرين',
+    difficulty: 'الصعوبة',
+    easy: 'سهل',
+    medium: 'متوسط',
+    hard: 'صعب',
+    mcq: 'اختيار من متعدد',
+    tf: 'صح وخطأ',
+    mix: 'مزيج',
+    questionCount: 'عدد الأسئلة',
+    startQuiz: 'بدء الاختبار',
+    results: 'النتائج',
+    share: 'مشاركة الرابط',
+    score: 'النتيجة',
+    time: 'الوقت المستغرق',
+    translate: 'ترجمة إلى',
+    toArabic: 'العربية',
+    toEnglish: 'الإنجليزية',
+    original: 'الأصلي'
+  }
+};

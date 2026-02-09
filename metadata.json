@@ -1,0 +1,5 @@
+{
+  "name": "Medicine Quiz Professional",
+  "description": "An advanced medical quiz platform that generates questions from files using Gemini AI, featuring multi-language support, stats, and leaderboards.",
+  "requestFramePermissions": []
+}
