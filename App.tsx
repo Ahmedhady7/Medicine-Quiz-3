@@ -1,37 +1,42 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { HashRouter as Router, Routes, Route, useNavigate, useParams, useLocation } from 'react-router-dom';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
-} from 'recharts';
 import * as pdfjsLib from 'pdfjs-dist';
 import { TRANSLATIONS } from './constants';
 import { Difficulty, QuestionType, User, Subject, Quiz, QuizAttempt } from './types';
 import { generateQuizQuestions } from './services/geminiService';
 
-// Set up PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
+// Improved PDF worker initialization
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.10.38/build/pdf.worker.mjs`;
 
-/** --- Utility for PDF Extraction --- */
-const extractTextFromPdf = async (file: File): Promise<string> => {
-  const arrayBuffer = await file.arrayBuffer();
-  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-  const pdf = await loadingTask.promise;
-  let fullText = "";
-  
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item: any) => item.str)
-      .join(" ");
-    fullText += pageText + "\n";
+/** --- Robust Text Extraction --- */
+const extractTextFromFiles = async (files: File[]): Promise<string> => {
+  let combinedText = "";
+  for (const file of files) {
+    if (file.type === "application/pdf") {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+        let pdfText = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          pdfText += textContent.items.map((item: any) => item.str).join(" ") + "\n";
+        }
+        combinedText += pdfText;
+      } catch (e) {
+        console.error("PDF Extraction failed for:", file.name, e);
+        throw new Error(`تعذر استخراج النص من ملف PDF: ${file.name}. قد يكون الملف محمياً أو عبارة عن صور فقط.`);
+      }
+    } else {
+      const text = await file.text();
+      combinedText += text + "\n";
+    }
   }
-  
-  return fullText;
+  return combinedText.trim();
 };
 
-/** --- Utility for Sharing --- */
 const encodeQuiz = (quiz: Quiz) => btoa(encodeURIComponent(JSON.stringify(quiz)));
 const decodeQuiz = (data: string): Quiz | null => {
   try { return JSON.parse(decodeURIComponent(atob(data))); } 
@@ -88,119 +93,6 @@ const Card = ({ children, className = "" }: any) => (
     {children}
   </div>
 );
-
-const LoginModal = ({ isOpen, onClose, onLogin }: any) => {
-  const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
-    name: '',
-    role: 'طالب',
-    institution: '',
-    email: ''
-  });
-
-  if (!isOpen) return null;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (step < 2) {
-      setStep(step + 1);
-    } else {
-      onLogin(formData);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6">
-      <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-2 bg-slate-100">
-          <div className="h-full bg-indigo-600 transition-all duration-500" style={{ width: `${(step / 2) * 100}%` }}></div>
-        </div>
-        
-        <div className="text-center mb-8">
-          <div className="text-6xl mb-4">{step === 1 ? '👤' : '🏫'}</div>
-          <h2 className="text-3xl font-black text-slate-800">
-            {step === 1 ? 'الملف الشخصي' : 'معلوماتك'}
-          </h2>
-          <p className="text-slate-400 font-bold mt-2">أدخل بياناتك لإنشاء حسابك الذكي</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {step === 1 ? (
-            <>
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase px-2">الاسم بالكامل</label>
-                <input 
-                  required
-                  type="text" 
-                  placeholder="مثال: أحمد محمد علي" 
-                  className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-lg"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase px-2">البريد الإلكتروني</label>
-                <input 
-                  type="email" 
-                  placeholder="example@email.com" 
-                  className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase px-2">المستوى الدراسي / المهني</label>
-                <select 
-                  className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-600"
-                  value={formData.role}
-                  onChange={(e) => setFormData({...formData, role: e.target.value})}
-                >
-                  <option>طالب</option>
-                  <option>معلم / أستاذ</option>
-                  <option>باحث</option>
-                  <option>موظف / مهني</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase px-2">المؤسسة / المدرسة</label>
-                <input 
-                  required
-                  type="text" 
-                  placeholder="مثال: جامعة الملك سعود" 
-                  className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
-                  value={formData.institution}
-                  onChange={(e) => setFormData({...formData, institution: e.target.value})}
-                />
-              </div>
-            </>
-          )}
-
-          <div className="flex gap-4 mt-8">
-            {step > 1 && (
-              <button 
-                type="button"
-                onClick={() => setStep(step - 1)}
-                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-lg transition-all"
-              >
-                السابق
-              </button>
-            )}
-            <button 
-              type="submit"
-              className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xl shadow-lg shadow-indigo-200 active:scale-95 transition-all"
-            >
-              {step === 1 ? 'التالي' : 'إتمام التسجيل'}
-            </button>
-          </div>
-          <button type="button" onClick={onClose} className="w-full text-slate-400 font-bold text-sm mt-4">إلغاء</button>
-        </form>
-      </div>
-    </div>
-  );
-};
 
 /** --- Views --- */
 
@@ -312,21 +204,24 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
 
   const handleGenerate = async () => {
     if (!files.length) return alert("الرجاء رفع الملفات أولاً");
+    
     setLoading(true);
-    setLoadingStatus("جاري استخراج النص من الملفات...");
+    setLoadingStatus("جاري استخراج المحتوى...");
+    
     try {
-      let content = "";
-      for (const f of files) {
-        if (f.type === "application/pdf") {
-          content += await extractTextFromPdf(f) + "\n";
-        } else {
-          content += await f.text() + "\n";
-        }
+      const content = await extractTextFromFiles(files);
+      
+      if (!content || content.length < 20) {
+        throw new Error("النص المستخرج غير كافٍ لتوليد أسئلة. تأكد من أن الملفات تحتوي على نص واضح.");
       }
       
-      setLoadingStatus("الذكاء الاصطناعي يقوم ببناء الأسئلة من المحتوى...");
+      setLoadingStatus("الذكاء الاصطناعي يقوم بالتوليد...");
       const questions = await generateQuizQuestions(content, count, type, diff, targetLang as any);
       
+      if (!questions || questions.length === 0) {
+        throw new Error("فشل الذكاء الاصطناعي في توليد أسئلة من هذا النص.");
+      }
+
       const newQuiz: Quiz = {
         id: Math.random().toString(36).substr(2, 9),
         title: files[0]?.name.split('.')[0] || "توليد ذكي",
@@ -341,7 +236,7 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
       navigate(`/quiz/${newQuiz.id}`);
     } catch (e: any) {
       console.error(e);
-      alert(e.message || "حدث خطأ أثناء معالجة الملفات. تأكد من جودة النص في الملفات المرفوعة.");
+      alert(e.message || "حدث خطأ غير متوقع.");
     } finally {
       setLoading(false);
       setLoadingStatus("");
@@ -358,22 +253,16 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
               <input type="file" multiple accept=".pdf,.txt" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setFiles(Array.from(e.target.files || []))} />
               <div className="text-7xl mb-4 group-hover:scale-110 transition-transform">📁</div>
               <p className="font-black text-indigo-600 text-lg">{strings.uploadFiles}</p>
-              <p className="text-xs text-slate-400 mt-2 font-bold">{files.length > 0 ? `${files.length} ملفات جاهزة` : 'يدعم PDF و TXT لأي محتوى'}</p>
-            </div>
-            <div className="space-y-2">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">تصنيف الاختبار</label>
-               <select value={subId} onChange={e => setSubId(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none outline-none text-slate-600 shadow-inner">
-                 {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-               </select>
+              <p className="text-xs text-slate-400 mt-2 font-bold">{files.length > 0 ? `${files.length} ملفات جاهزة` : 'يدعم PDF و TXT'}</p>
             </div>
           </div>
 
           <div className="space-y-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">{strings.difficulty}</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase px-2">{strings.difficulty}</label>
               <div className="grid grid-cols-2 gap-2">
                 {[Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD, Difficulty.VERY_HARD].map(d => (
-                  <button key={d} onClick={() => setDiff(d)} className={`py-4 rounded-xl font-black text-[11px] uppercase transition-all ${diff === d ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>
+                  <button key={d} onClick={() => setDiff(d)} className={`py-4 rounded-xl font-black text-[11px] uppercase transition-all ${diff === d ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>
                     {strings[d as keyof typeof strings] || d}
                   </button>
                 ))}
@@ -382,7 +271,7 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">نوع الأسئلة</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase px-2">نوع الأسئلة</label>
                 <select value={type} onChange={e => setType(e.target.value as any)} className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none outline-none">
                   <option value={QuestionType.MCQ}>{strings.mcq}</option>
                   <option value={QuestionType.TRUE_FALSE}>{strings.tf}</option>
@@ -390,32 +279,30 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">عدد الأسئلة</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase px-2">عدد الأسئلة</label>
                 <input type="number" min="1" max="100" value={count} onChange={e => setCount(Number(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl font-black text-center text-xl outline-none" />
               </div>
             </div>
-
+            
             <div className="space-y-2">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">لغة الاختبار</label>
-               <div className="flex gap-2 p-1.5 bg-slate-100 rounded-2xl">
-                 {['original', 'ar', 'en'].map(l => (
-                   <button key={l} onClick={() => setTargetLang(l)} className={`flex-1 py-3 rounded-xl font-bold text-[10px] uppercase transition-all ${targetLang === l ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>
-                     {strings[l as keyof typeof strings] || l}
-                   </button>
-                 ))}
-               </div>
+               <label className="text-[10px] font-black text-slate-400 uppercase px-2">لغة الأسئلة</label>
+               <select value={targetLang} onChange={e => setTargetLang(e.target.value as any)} className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none outline-none">
+                  <option value="original">{strings.original}</option>
+                  <option value="ar">{strings.toArabic}</option>
+                  <option value="en">{strings.toEnglish}</option>
+               </select>
             </div>
           </div>
         </div>
         <button 
           onClick={handleGenerate} 
-          disabled={loading || !subId || files.length === 0} 
-          className="w-full mt-12 py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-2xl shadow-2xl shadow-indigo-200 disabled:opacity-50 transition-all hover:bg-indigo-700 active:scale-95 flex flex-col items-center justify-center"
+          disabled={loading || files.length === 0} 
+          className="w-full mt-12 py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-2xl shadow-2xl disabled:opacity-50 transition-all hover:bg-indigo-700 active:scale-95 flex flex-col items-center justify-center"
         >
           {loading ? (
             <>
               <span className="animate-pulse">{loadingStatus}</span>
-              <span className="text-xs font-normal mt-2 opacity-70 italic">هذه العملية تتم بقوة Gemini 3 الذكي</span>
+              <span className="text-xs font-normal mt-2 opacity-70 italic">هذه العملية قد تستغرق دقيقة..</span>
             </>
           ) : strings.generateQuiz}
         </button>
@@ -494,16 +381,16 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
       <Card className="p-10 md:p-16 !rounded-[4rem] relative shadow-2xl">
         <h3 className="text-2xl md:text-3xl font-black mb-14 text-slate-800 leading-tight">{current.text}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {(current.options || ['True', 'False']).map((opt, i) => {
+          {(current.options || []).map((opt, i) => {
              const isSel = ans[current.id] === opt;
              const isCorr = opt === current.correctAnswer;
              let style = "border-slate-100 text-slate-600 hover:bg-slate-50 hover:border-indigo-100";
              if (showExpl) {
-               if (isCorr) style = "bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100";
-               else if (isSel) style = "bg-rose-500 border-rose-500 text-white shadow-lg shadow-rose-100";
+               if (isCorr) style = "bg-emerald-500 border-emerald-500 text-white shadow-lg";
+               else if (isSel) style = "bg-rose-500 border-rose-500 text-white shadow-lg";
                else style = "opacity-40 grayscale pointer-events-none";
              } else if (isSel) {
-               style = "bg-indigo-600 border-indigo-600 text-white scale-105 shadow-xl shadow-indigo-100";
+               style = "bg-indigo-600 border-indigo-600 text-white scale-105 shadow-xl";
              }
 
              return (
@@ -536,102 +423,28 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
   );
 };
 
-const ImportQuiz = ({ quizzes, setQuizzes }: any) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const data = params.get('data');
-    if (data) {
-      const decoded = decodeQuiz(data);
-      if (decoded) {
-        if (!quizzes.find((q: any) => q.id === decoded.id)) {
-          setQuizzes((prev: any) => [...prev, decoded]);
-        }
-        navigate(`/quiz/${decoded.id}`);
-      } else {
-        alert("بيانات الرابط تالفة!");
-        navigate('/');
-      }
-    }
-  }, [location, navigate, quizzes, setQuizzes]);
-
-  return <div className="text-center py-24 font-black text-indigo-600 animate-pulse text-2xl">جاري استيراد الاختبار المشترك...</div>;
-};
-
 /** --- Main App --- */
 
 const App = () => {
   const [lang, setLang] = useState<'en' | 'ar'>('ar');
-  const [isLoginModalOpen, setLoginModalOpen] = useState(false);
-  const [user, setUser] = useState(() => {
-    const s = localStorage.getItem('mq_user');
-    return s ? JSON.parse(s) : { id: 'anon', name: 'Anonymous User', photo: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', isLoggedIn: false };
-  });
-
-  const [subjects, setSubjects] = useState<Subject[]>(() => {
-    const s = localStorage.getItem('mq_subjects');
-    return s ? JSON.parse(s) : [
-      { id: '1', name: 'العلوم العامة', chapters: [] },
-      { id: '2', name: 'اللغات والآداب', chapters: [] },
-      { id: '3', name: 'التكنولوجيا', chapters: [] }
-    ];
-  });
-
-  const [quizzes, setQuizzes] = useState<Quiz[]>(() => {
-    const q = localStorage.getItem('mq_quizzes');
-    return q ? JSON.parse(q) : [];
-  });
-
-  const [attempts, setAttempts] = useState<QuizAttempt[]>(() => {
-    const a = localStorage.getItem('mq_attempts');
-    return a ? JSON.parse(a) : [];
-  });
-
-  useEffect(() => localStorage.setItem('mq_subjects', JSON.stringify(subjects)), [subjects]);
-  useEffect(() => localStorage.setItem('mq_quizzes', JSON.stringify(quizzes)), [quizzes]);
-  useEffect(() => localStorage.setItem('mq_attempts', JSON.stringify(attempts)), [attempts]);
-  useEffect(() => localStorage.setItem('mq_user', JSON.stringify(user)), [user]);
-
-  const handleLogin = (data: any) => {
-    const newUser = { 
-      id: 'user-' + Date.now(), 
-      name: data.name, 
-      photo: `https://i.pravatar.cc/150?u=${data.name}`, 
-      isLoggedIn: true,
-      role: data.role,
-      institution: data.institution
-    };
-    setUser(newUser);
-    setLoginModalOpen(false);
-  };
-
-  const handleLogout = () => {
-    if (window.confirm('هل تريد تسجيل الخروج؟')) {
-      setUser({ id: 'anon', name: 'Anonymous User', photo: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', isLoggedIn: false });
-    }
-  };
+  const [user, setUser] = useState({ id: 'anon', name: 'Anonymous User', photo: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', isLoggedIn: false });
+  const [subjects, setSubjects] = useState<Subject[]>([{ id: '1', name: 'العلوم العامة', chapters: [] }]);
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
 
   return (
     <Router>
       <div className={`min-h-screen bg-slate-50 pb-20 overflow-x-hidden ${lang === 'ar' ? 'rtl' : ''}`}>
-        <Navbar lang={lang} setLang={setLang} user={user} onLogin={() => setLoginModalOpen(true)} onLogout={handleLogout} />
+        <Navbar lang={lang} setLang={setLang} user={user} onLogin={() => {}} onLogout={() => {}} />
         <main className="container mx-auto px-6 py-10 max-w-7xl">
           <Routes>
             <Route path="/" element={<Dashboard strings={TRANSLATIONS[lang]} subjects={subjects} setSubjects={setSubjects} attempts={attempts} quizzes={quizzes} lang={lang} user={user} />} />
             <Route path="/create" element={<CreateQuiz strings={TRANSLATIONS[lang]} subjects={subjects} quizzes={quizzes} setQuizzes={setQuizzes} />} />
             <Route path="/quiz/:quizId" element={<QuizInterface strings={TRANSLATIONS[lang]} setAttempts={setAttempts} quizzes={quizzes} user={user} />} />
-            <Route path="/import" element={<ImportQuiz quizzes={quizzes} setQuizzes={setQuizzes} />} />
-            <Route path="/stats" element={<div className="text-center font-black py-20 text-slate-300 text-3xl">قريباً: تحليلات الأداء المتقدمة 📊</div>} />
-            <Route path="/leaderboard" element={<div className="text-center font-black py-20 text-slate-300 text-3xl">قريباً: لوحة المتصدرين العالمية 🏆</div>} />
+            <Route path="/stats" element={<div className="text-center font-black py-20 text-slate-300 text-3xl">📊 قريباً: الإحصائيات</div>} />
+            <Route path="/leaderboard" element={<div className="text-center font-black py-20 text-slate-300 text-3xl">🏆 قريباً: لوحة المتصدرين</div>} />
           </Routes>
         </main>
-        <LoginModal 
-          isOpen={isLoginModalOpen} 
-          onClose={() => setLoginModalOpen(false)} 
-          onLogin={handleLogin} 
-        />
       </div>
     </Router>
   );

@@ -11,33 +11,29 @@ export const generateQuizQuestions = async (
 ): Promise<Question[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  // تعزيز تعليمات الصعوبة لتكون أكثر تحدياً في المستويات العليا
   const difficultyInstruction = {
-    [Difficulty.EASY]: "Focus on basic definitions, surface-level facts, and explicit information directly stated in the text.",
-    [Difficulty.MEDIUM]: "Focus on core concepts, understanding relationships between ideas, and standard applications of the information.",
-    [Difficulty.HARD]: "Focus on analysis, identifying nuances, subtle details, and requiring logical deduction based on the content.",
-    [Difficulty.VERY_HARD]: "EXTREME CHALLENGE: Focus on obscure details, complex synthesis of multiple points, lateral thinking, and highly challenging inference-based questions that test deep mastery and critical evaluation of the text."
+    [Difficulty.EASY]: "Direct facts and simple definitions.",
+    [Difficulty.MEDIUM]: "Conceptual understanding and application.",
+    [Difficulty.HARD]: "Analysis, subtle details, and logical deduction.",
+    [Difficulty.VERY_HARD]: "EXTREME CHALLENGE: Obscure details, complex synthesis, lateral thinking, and highly challenging inference-based questions."
   }[difficulty];
 
   const prompt = `
-    Role: World-Class Senior Academic Examiner and Professional Quiz Creator.
-    Task: Create exactly ${count} high-quality, professional questions based strictly on the provided content.
-    
-    IMPORTANT: You must accept the content as it is, regardless of the topic (Medical, Technical, Academic, or General). Do not refuse based on subject matter.
-    
-    Difficulty Level: ${difficulty} (${difficultyInstruction})
-    Format: ${type === 'mix' ? 'A balanced mixture of Multiple Choice (MCQ) and True/False' : type.toUpperCase()}.
-    Language: ${targetLanguage === 'original' ? 'The same language as the input text' : (targetLanguage === 'ar' ? 'Arabic' : 'English')}.
+    Role: Senior Academic Examiner.
+    Task: Create exactly ${count} professional questions from the provided text.
+    Target Language: ${targetLanguage === 'original' ? 'The same as input' : (targetLanguage === 'ar' ? 'Arabic' : 'English')}.
+    Level: ${difficulty} (${difficultyInstruction}).
+    Type: ${type === 'mix' ? 'MCQ and True/False' : type}.
 
-    Rules:
-    1. If difficulty is VERY_HARD, make the questions truly challenging for experts.
-    2. MCQ: Exactly 4 distinct and plausible options.
-    3. True/False: Exactly 2 options (True/False or صح/خطأ).
-    4. Explanation: Provide a deep, insightful "why" for the correct answer.
-    5. Output: Return ONLY a valid JSON array of objects. No markdown blocks, no intro, no outro.
+    STRICT RULES:
+    1. Base everything on the text provided.
+    2. If difficulty is VERY_HARD, make it extremely challenging.
+    3. MCQ must have 4 options. True/False must have 2.
+    4. Explanation must be detailed.
+    5. Return ONLY a JSON array. No text before or after.
     
-    Content to analyze:
-    ${fileContent.substring(0, 38000)}
+    TEXT TO ANALYZE:
+    ${fileContent.substring(0, 30000)}
   `;
 
   try {
@@ -58,24 +54,23 @@ export const generateQuizQuestions = async (
               explanation: { type: Type.STRING },
               type: { type: Type.STRING }
             },
-            required: ["id", "text", "correctAnswer", "explanation", "type"]
+            required: ["text", "correctAnswer", "explanation", "type"]
           }
         }
       }
     });
 
     const text = response.text || '[]';
-    // تنظيف المخرجات من أي شوائب برمجية قد تظهر
     const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const questions: Question[] = JSON.parse(cleanJson);
+    const questions: any[] = JSON.parse(cleanJson);
     
-    // تأمين الـ IDs إذا كانت مفقودة
-    return questions.map((q, idx) => ({
+    return questions.map((q, i) => ({
       ...q,
-      id: q.id || `q-${idx}-${Date.now()}`
+      id: q.id || `q-${i}-${Date.now()}`,
+      options: q.options || (q.type === 'true_false' ? (targetLanguage === 'ar' ? ['صح', 'خطأ'] : ['True', 'False']) : [])
     }));
   } catch (error) {
-    console.error("Gemini Engine Error:", error);
-    throw new Error("فشل الذكاء الاصطناعي في توليد الأسئلة. حاول تقليل عدد الأسئلة أو التأكد من وضوح النص.");
+    console.error("AI Error:", error);
+    throw new Error("الذكاء الاصطناعي واجه مشكلة في معالجة النص. حاول تقليل عدد الأسئلة أو التأكد من أن الملف يحتوي على نص مقروء.");
   }
 };
