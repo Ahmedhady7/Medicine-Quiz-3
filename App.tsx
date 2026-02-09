@@ -6,7 +6,7 @@ import { TRANSLATIONS } from './constants';
 import { Difficulty, QuestionType, User, Subject, Quiz, QuizAttempt } from './types';
 import { generateQuizQuestions } from './services/geminiService';
 
-// Improved PDF worker initialization
+// تهيئة الـ Worker الخاص بـ PDF.js بشكل أكثر استقراراً
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.10.38/build/pdf.worker.mjs`;
 
 /** --- Robust Text Extraction --- */
@@ -27,7 +27,7 @@ const extractTextFromFiles = async (files: File[]): Promise<string> => {
         combinedText += pdfText;
       } catch (e) {
         console.error("PDF Extraction failed for:", file.name, e);
-        throw new Error(`تعذر استخراج النص من ملف PDF: ${file.name}. قد يكون الملف محمياً أو عبارة عن صور فقط.`);
+        throw new Error(`تعذر استخراج النص من ملف PDF: ${file.name}. قد يكون الملف محمياً أو يحتوي على صور فقط.`);
       }
     } else {
       const text = await file.text();
@@ -76,13 +76,8 @@ const Navbar = ({ lang, setLang, user, onLogin, onLogout }: any) => {
               <p className="text-sm font-bold text-slate-700 leading-none">{user.name}</p>
             </div>
             <img src={user.photo} className="w-10 h-10 rounded-full border-2 border-indigo-100 shadow-sm" alt="profile" />
-            <button onClick={onLogout} className="text-[10px] font-black text-rose-500 hover:text-rose-700 uppercase">{strings.logout}</button>
           </div>
-        ) : (
-          <button onClick={onLogin} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-full shadow-lg hover:shadow-indigo-200 transition-all active:scale-95 text-sm font-black">
-            دخول / إنشاء حساب
-          </button>
-        )}
+        ) : null}
       </div>
     </nav>
   );
@@ -127,7 +122,6 @@ const Dashboard = ({ strings, subjects, setSubjects, attempts, quizzes, lang, us
             {subjects.map((s: any) => (
               <div key={s.id} className="p-3 bg-slate-50 rounded-xl flex justify-between items-center text-sm font-bold text-slate-600 hover:bg-indigo-50 transition-colors">
                 <span>{s.name}</span>
-                <span className="text-[10px] bg-white px-2 py-1 rounded-full border">{s.chapters.length} Ch</span>
               </div>
             ))}
           </div>
@@ -145,7 +139,7 @@ const Dashboard = ({ strings, subjects, setSubjects, attempts, quizzes, lang, us
       <div className="lg:col-span-8 space-y-8">
         <Card>
            <h2 className="text-xl font-black mb-6 flex items-center gap-2">
-             📚 {user.isLoggedIn ? `مكتبة ${user.name}` : 'الاختبارات المتاحة'}
+             📚 مكتبة الاختبارات الذكية
            </h2>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              {quizzes.length > 0 ? quizzes.map((q: Quiz) => (
@@ -153,9 +147,7 @@ const Dashboard = ({ strings, subjects, setSubjects, attempts, quizzes, lang, us
                  <div>
                    <div className="flex justify-between items-start mb-3">
                      <span className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-xl ${
-                       q.difficulty === Difficulty.VERY_HARD ? 'bg-rose-100 text-rose-700' :
-                       q.difficulty === Difficulty.HARD ? 'bg-orange-100 text-orange-700' :
-                       q.difficulty === Difficulty.MEDIUM ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
+                       q.difficulty === Difficulty.VERY_HARD ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'
                      }`}>
                        {strings[q.difficulty as keyof typeof strings] || q.difficulty}
                      </span>
@@ -169,23 +161,11 @@ const Dashboard = ({ strings, subjects, setSubjects, attempts, quizzes, lang, us
                </div>
              )) : (
                <div className="col-span-2 text-center py-16 bg-slate-50/50 rounded-[2rem] border-2 border-dashed border-slate-200">
-                  <div className="text-5xl mb-4">📖</div>
-                  <p className="text-slate-400 font-bold italic">لا توجد اختبارات حالياً.. ابدأ بإنشاء واحد!</p>
+                  <p className="text-slate-400 font-bold">لا توجد اختبارات.. ارفع ملفاً للبدء!</p>
                </div>
              )}
            </div>
         </Card>
-
-        <div className="grid grid-cols-2 gap-6">
-          <button onClick={() => navigate('/stats')} className="p-10 bg-white border border-slate-100 rounded-[3rem] flex flex-col items-center gap-4 hover:shadow-2xl transition-all group">
-            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">📊</div>
-            <span className="font-black text-slate-700 text-lg">{strings.stats}</span>
-          </button>
-          <button onClick={() => navigate('/leaderboard')} className="p-10 bg-white border border-slate-100 rounded-[3rem] flex flex-col items-center gap-4 hover:shadow-2xl transition-all group">
-            <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">🏆</div>
-            <span className="font-black text-slate-700 text-lg">{strings.leaderboard}</span>
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -196,7 +176,6 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [subId, setSubId] = useState(subjects[0]?.id || '');
   const [diff, setDiff] = useState(Difficulty.MEDIUM);
   const [type, setType] = useState(QuestionType.MIX);
   const [count, setCount] = useState(10);
@@ -205,27 +184,33 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
   const handleGenerate = async () => {
     if (!files.length) return alert("الرجاء رفع الملفات أولاً");
     
+    // التحقق من وجود مفتاح API مفعل
+    if (typeof window.aistudio !== 'undefined') {
+      const hasKey = await window.aistudio.hasSelectedApiKey();
+      if (!hasKey) {
+        alert("يرجى اختيار مفتاح API أولاً لتتمكن من استخدام الذكاء الاصطناعي.");
+        await window.aistudio.openSelectKey();
+        // نفترض النجاح بعد فتح النافذة حسب التعليمات
+      }
+    }
+
     setLoading(true);
-    setLoadingStatus("جاري استخراج المحتوى...");
+    setLoadingStatus("جاري استخراج النص...");
     
     try {
       const content = await extractTextFromFiles(files);
       
-      if (!content || content.length < 20) {
-        throw new Error("النص المستخرج غير كافٍ لتوليد أسئلة. تأكد من أن الملفات تحتوي على نص واضح.");
+      if (!content || content.trim().length < 50) {
+        throw new Error("النص المستخرج من الملفات غير كافٍ. تأكد أن الملف يحتوي على نصوص وليس مجرد صور.");
       }
       
-      setLoadingStatus("الذكاء الاصطناعي يقوم بالتوليد...");
+      setLoadingStatus("الذكاء الاصطناعي يقوم ببناء الأسئلة...");
       const questions = await generateQuizQuestions(content, count, type, diff, targetLang as any);
       
-      if (!questions || questions.length === 0) {
-        throw new Error("فشل الذكاء الاصطناعي في توليد أسئلة من هذا النص.");
-      }
-
       const newQuiz: Quiz = {
         id: Math.random().toString(36).substr(2, 9),
-        title: files[0]?.name.split('.')[0] || "توليد ذكي",
-        subjectId: subId,
+        title: files[0]?.name.split('.')[0] || "اختبار جديد",
+        subjectId: subjects[0]?.id || '1',
         chapterId: '',
         difficulty: diff,
         questions,
@@ -253,7 +238,7 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
               <input type="file" multiple accept=".pdf,.txt" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setFiles(Array.from(e.target.files || []))} />
               <div className="text-7xl mb-4 group-hover:scale-110 transition-transform">📁</div>
               <p className="font-black text-indigo-600 text-lg">{strings.uploadFiles}</p>
-              <p className="text-xs text-slate-400 mt-2 font-bold">{files.length > 0 ? `${files.length} ملفات جاهزة` : 'يدعم PDF و TXT'}</p>
+              <p className="text-xs text-slate-400 mt-2 font-bold">{files.length > 0 ? `${files.length} ملفات جاهزة` : 'PDF أو نصوص'}</p>
             </div>
           </div>
 
@@ -283,15 +268,6 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
                 <input type="number" min="1" max="100" value={count} onChange={e => setCount(Number(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl font-black text-center text-xl outline-none" />
               </div>
             </div>
-            
-            <div className="space-y-2">
-               <label className="text-[10px] font-black text-slate-400 uppercase px-2">لغة الأسئلة</label>
-               <select value={targetLang} onChange={e => setTargetLang(e.target.value as any)} className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none outline-none">
-                  <option value="original">{strings.original}</option>
-                  <option value="ar">{strings.toArabic}</option>
-                  <option value="en">{strings.toEnglish}</option>
-               </select>
-            </div>
           </div>
         </div>
         <button 
@@ -302,7 +278,7 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
           {loading ? (
             <>
               <span className="animate-pulse">{loadingStatus}</span>
-              <span className="text-xs font-normal mt-2 opacity-70 italic">هذه العملية قد تستغرق دقيقة..</span>
+              <span className="text-xs font-normal mt-2 opacity-70 italic">هذه العملية تتم عبر Gemini 3 الذكي</span>
             </>
           ) : strings.generateQuiz}
         </button>
@@ -352,14 +328,13 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
     return (
       <div className="max-w-3xl mx-auto animate-in zoom-in duration-500">
         <Card className="text-center p-16 !rounded-[4rem] border-t-8 border-indigo-600 shadow-2xl relative overflow-hidden">
-          <div className="absolute inset-0 bg-indigo-50 opacity-10 pointer-events-none"></div>
-          <div className="text-8xl mb-6 relative">🏆</div>
-          <h2 className="text-4xl font-black mb-10 text-slate-800 relative">{strings.results}</h2>
-          <div className="grid grid-cols-2 gap-8 mb-12 relative">
+          <div className="text-8xl mb-6">🏆</div>
+          <h2 className="text-4xl font-black mb-10 text-slate-800">{strings.results}</h2>
+          <div className="grid grid-cols-2 gap-8 mb-12">
             <div className="p-8 bg-white shadow-sm border border-slate-100 rounded-[2.5rem]"><p className="text-6xl font-black text-indigo-600">{score}/{quiz.questions.length}</p><p className="text-slate-400 font-bold uppercase text-xs tracking-widest mt-2">{strings.score}</p></div>
             <div className="p-8 bg-white shadow-sm border border-slate-100 rounded-[2.5rem]"><p className="text-6xl font-black text-indigo-600">{Math.round((Date.now()-start)/1000)}ث</p><p className="text-slate-400 font-bold uppercase text-xs tracking-widest mt-2">الوقت</p></div>
           </div>
-          <button onClick={() => navigate('/')} className="relative px-16 py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-2xl shadow-xl hover:scale-105 active:scale-95 transition-all">العودة للرئيسية</button>
+          <button onClick={() => navigate('/')} className="px-16 py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-2xl shadow-xl hover:scale-105 active:scale-95 transition-all">العودة للرئيسية</button>
         </Card>
       </div>
     );
@@ -423,14 +398,47 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
   );
 };
 
+const ImportQuiz = ({ quizzes, setQuizzes }: any) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const data = params.get('data');
+    if (data) {
+      const decoded = decodeQuiz(data);
+      if (decoded) {
+        if (!quizzes.find((q: any) => q.id === decoded.id)) {
+          setQuizzes((prev: any) => [...prev, decoded]);
+        }
+        navigate(`/quiz/${decoded.id}`);
+      } else {
+        alert("بيانات الرابط تالفة!");
+        navigate('/');
+      }
+    }
+  }, [location, navigate, quizzes, setQuizzes]);
+
+  return <div className="text-center py-24 font-black text-indigo-600 animate-pulse text-2xl">جاري استيراد الاختبار...</div>;
+};
+
 /** --- Main App --- */
 
 const App = () => {
   const [lang, setLang] = useState<'en' | 'ar'>('ar');
   const [user, setUser] = useState({ id: 'anon', name: 'Anonymous User', photo: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', isLoggedIn: false });
-  const [subjects, setSubjects] = useState<Subject[]>([{ id: '1', name: 'العلوم العامة', chapters: [] }]);
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([{ id: '1', name: 'عام', chapters: [] }]);
+  const [quizzes, setQuizzes] = useState<Quiz[]>(() => {
+    const q = localStorage.getItem('mq_quizzes');
+    return q ? JSON.parse(q) : [];
+  });
+  const [attempts, setAttempts] = useState<QuizAttempt[]>(() => {
+    const a = localStorage.getItem('mq_attempts');
+    return a ? JSON.parse(a) : [];
+  });
+
+  useEffect(() => localStorage.setItem('mq_quizzes', JSON.stringify(quizzes)), [quizzes]);
+  useEffect(() => localStorage.setItem('mq_attempts', JSON.stringify(attempts)), [attempts]);
 
   return (
     <Router>
@@ -441,6 +449,7 @@ const App = () => {
             <Route path="/" element={<Dashboard strings={TRANSLATIONS[lang]} subjects={subjects} setSubjects={setSubjects} attempts={attempts} quizzes={quizzes} lang={lang} user={user} />} />
             <Route path="/create" element={<CreateQuiz strings={TRANSLATIONS[lang]} subjects={subjects} quizzes={quizzes} setQuizzes={setQuizzes} />} />
             <Route path="/quiz/:quizId" element={<QuizInterface strings={TRANSLATIONS[lang]} setAttempts={setAttempts} quizzes={quizzes} user={user} />} />
+            <Route path="/import" element={<ImportQuiz quizzes={quizzes} setQuizzes={setQuizzes} />} />
             <Route path="/stats" element={<div className="text-center font-black py-20 text-slate-300 text-3xl">📊 قريباً: الإحصائيات</div>} />
             <Route path="/leaderboard" element={<div className="text-center font-black py-20 text-slate-300 text-3xl">🏆 قريباً: لوحة المتصدرين</div>} />
           </Routes>
