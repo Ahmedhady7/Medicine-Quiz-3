@@ -12,32 +12,32 @@ export const generateMedicalQuestions = async (
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const difficultyInstruction = {
-    [Difficulty.EASY]: "Basic medical concepts, fundamental terminology, and simple facts.",
-    [Difficulty.MEDIUM]: "Clinical presentations, standard diagnostic procedures, and common treatments.",
-    [Difficulty.HARD]: "Differential diagnosis, complex pathophysiology, and specific pharmacology.",
-    [Difficulty.VERY_HARD]: "Advanced specialized medical knowledge, rare conditions, complex ethical dilemmas, and latest research-based clinical guidelines."
+    [Difficulty.EASY]: "Focus on basic definitions, simple facts, and clear concepts from the text.",
+    [Difficulty.MEDIUM]: "Focus on core principles, analysis of standard scenarios, and common applications.",
+    [Difficulty.HARD]: "Focus on complex reasoning, detailed analysis of nuances, and connections between different parts of the content.",
+    [Difficulty.VERY_HARD]: "Focus on expert-level insights, subtle exceptions, highly advanced theoretical scenarios, and critical evaluation of the material."
   }[difficulty];
 
   const prompt = `
-    Role: Senior Medical Academic Examiner.
-    Task: Generate exactly ${count} medical questions.
+    Role: Expert Academic Examiner and Educator.
+    Task: Generate exactly ${count} high-quality questions based strictly on the provided content.
     Level: ${difficulty} (${difficultyInstruction})
-    Format: ${type === 'mix' ? 'A mixture of MCQs and True/False' : type.toUpperCase()}.
-    Language: ${targetLanguage === 'original' ? 'Same as input content' : targetLanguage}.
+    Format: ${type === 'mix' ? 'A mixture of Multiple Choice Questions (MCQ) and True/False' : type.toUpperCase()}.
+    Language: ${targetLanguage === 'original' ? 'The same language as the input content' : targetLanguage}.
 
-    Instructions:
-    1. Every question must be clinically accurate and relevant to the content.
-    2. MCQ must have 4 options. T/F must have exactly 2 options: ["True", "False"] or ["صح", "خطأ"].
-    3. The 'explanation' field must provide high-yield clinical reasoning.
-    4. Return ONLY a valid JSON array of objects.
+    Strict Instructions:
+    1. Every question must be factually accurate based on the provided text.
+    2. MCQ must have 4 unique options. True/False must have exactly 2 options: ["True", "False"] or ["صح", "خطأ"] depending on the language.
+    3. The 'explanation' field must provide a clear and detailed reasoning for why the correct answer is right.
+    4. Return ONLY a valid JSON array of objects without any conversational text.
 
     Content to analyze:
-    ${fileContent.substring(0, 30000)}
+    ${fileContent.substring(0, 35000)}
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview', // Flash is better for structured JSON tasks
+      model: 'gemini-2.0-flash-exp', // Using a highly capable model for structured output
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -60,13 +60,13 @@ export const generateMedicalQuestions = async (
     });
 
     let text = response.text || '[]';
-    // Clean potential markdown code blocks if the API returns them despite the mimeType
+    // Clean potential markdown code blocks
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     
     const questions: Question[] = JSON.parse(text);
     return questions;
   } catch (error) {
-    console.error("Gemini Error:", error);
+    console.error("Gemini Generation Error:", error);
     throw error;
   }
 };

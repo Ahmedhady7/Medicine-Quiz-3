@@ -55,7 +55,7 @@ const Navbar = ({ lang, setLang, user, onLogin, onLogout }: any) => {
           </button>
         )}
         <h1 onClick={() => navigate('/')} className="text-xl md:text-2xl font-black text-indigo-600 cursor-pointer flex items-center gap-2">
-          <span className="text-3xl">⚕️</span> <span className="hidden sm:inline">{strings.title}</span>
+          <span className="text-3xl">✨</span> <span className="hidden sm:inline">{strings.title}</span>
         </h1>
       </div>
 
@@ -93,7 +93,7 @@ const LoginModal = ({ isOpen, onClose, onLogin }: any) => {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     name: '',
-    role: 'طالب طب',
+    role: 'طالب',
     institution: '',
     email: ''
   });
@@ -117,11 +117,11 @@ const LoginModal = ({ isOpen, onClose, onLogin }: any) => {
         </div>
         
         <div className="text-center mb-8">
-          <div className="text-6xl mb-4">{step === 1 ? '👨‍⚕️' : '🏥'}</div>
+          <div className="text-6xl mb-4">{step === 1 ? '👤' : '🏫'}</div>
           <h2 className="text-3xl font-black text-slate-800">
-            {step === 1 ? 'الملف الشخصي' : 'المعلومات المهنية'}
+            {step === 1 ? 'الملف الشخصي' : 'معلوماتك'}
           </h2>
-          <p className="text-slate-400 font-bold mt-2">أدخل بياناتك الحقيقية لبناء ملفك الطبي</p>
+          <p className="text-slate-400 font-bold mt-2">أدخل بياناتك لإنشاء حسابك الذكي</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -139,10 +139,10 @@ const LoginModal = ({ isOpen, onClose, onLogin }: any) => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase px-2">البريد الإلكتروني (اختياري)</label>
+                <label className="text-xs font-black text-slate-400 uppercase px-2">البريد الإلكتروني</label>
                 <input 
                   type="email" 
-                  placeholder="dr.example@med.com" 
+                  placeholder="example@email.com" 
                   className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
                   value={formData.email}
                   onChange={(e) => setFormData({...formData, email: e.target.value})}
@@ -152,24 +152,24 @@ const LoginModal = ({ isOpen, onClose, onLogin }: any) => {
           ) : (
             <>
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase px-2">المستوى الوظيفي</label>
+                <label className="text-xs font-black text-slate-400 uppercase px-2">المستوى الدراسي / المهني</label>
                 <select 
                   className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-600"
                   value={formData.role}
                   onChange={(e) => setFormData({...formData, role: e.target.value})}
                 >
-                  <option>طالب طب</option>
-                  <option>طبيب امتياز</option>
-                  <option>طبيب أخصائي</option>
-                  <option>طبيب استشاري</option>
+                  <option>طالب</option>
+                  <option>معلم / أستاذ</option>
+                  <option>باحث</option>
+                  <option>موظف / مهني</option>
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase px-2">الجامعة أو المستشفى</label>
+                <label className="text-xs font-black text-slate-400 uppercase px-2">المؤسسة / المدرسة</label>
                 <input 
                   required
                   type="text" 
-                  placeholder="مثال: جامعة القاهرة / مستشفى القصر العيني" 
+                  placeholder="مثال: جامعة الملك سعود" 
                   className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
                   value={formData.institution}
                   onChange={(e) => setFormData({...formData, institution: e.target.value})}
@@ -228,7 +228,7 @@ const Dashboard = ({ strings, subjects, setSubjects, attempts, quizzes, lang, us
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform"></div>
           <h2 className="text-xl font-black mb-6 flex items-center gap-2 relative z-10">📑 {strings.subjects}</h2>
           <div className="flex gap-2 mb-6 relative z-10">
-            <input value={newSub} onChange={e => setNewSub(e.target.value)} className="flex-1 px-4 py-3 bg-slate-50 rounded-2xl text-sm border-none focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="إضافة مادة..." />
+            <input value={newSub} onChange={e => setNewSub(e.target.value)} className="flex-1 px-4 py-3 bg-slate-50 rounded-2xl text-sm border-none focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="إضافة تصنيف..." />
             <button onClick={addSub} className="w-12 h-12 bg-indigo-600 text-white rounded-2xl font-black text-xl">+</button>
           </div>
           <div className="space-y-2 max-h-48 overflow-y-auto pr-1 relative z-10">
@@ -253,7 +253,7 @@ const Dashboard = ({ strings, subjects, setSubjects, attempts, quizzes, lang, us
       <div className="lg:col-span-8 space-y-8">
         <Card>
            <h2 className="text-xl font-black mb-6 flex items-center gap-2">
-             📚 {user.isLoggedIn ? `مكتبة ${user.name}` : 'الاختبارات العامة'}
+             📚 {user.isLoggedIn ? `مكتبة ${user.name}` : 'الاختبارات المتاحة'}
            </h2>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              {quizzes.length > 0 ? quizzes.map((q: Quiz) => (
@@ -277,8 +277,8 @@ const Dashboard = ({ strings, subjects, setSubjects, attempts, quizzes, lang, us
                </div>
              )) : (
                <div className="col-span-2 text-center py-16 bg-slate-50/50 rounded-[2rem] border-2 border-dashed border-slate-200">
-                  <div className="text-5xl mb-4">🩺</div>
-                  <p className="text-slate-400 font-bold italic">مكتبتك فارغة حالياً.. ابدأ بإنشاء أول اختبار الآن!</p>
+                  <div className="text-5xl mb-4">📖</div>
+                  <p className="text-slate-400 font-bold italic">لا توجد اختبارات حالياً.. ابدأ بإنشاء واحد!</p>
                </div>
              )}
            </div>
@@ -324,12 +324,12 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
         }
       }
       
-      setLoadingStatus("الذكاء الاصطناعي يقوم ببناء الأسئلة الطبية...");
+      setLoadingStatus("الذكاء الاصطناعي يقوم ببناء الأسئلة من المحتوى...");
       const questions = await generateMedicalQuestions(content, count, type, diff, targetLang as any);
       
       const newQuiz: Quiz = {
         id: Math.random().toString(36).substr(2, 9),
-        title: files[0]?.name.split('.')[0] || "توليد طبي ذكي",
+        title: files[0]?.name.split('.')[0] || "توليد ذكي",
         subjectId: subId,
         chapterId: '',
         difficulty: diff,
@@ -341,7 +341,7 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
       navigate(`/quiz/${newQuiz.id}`);
     } catch (e) {
       console.error(e);
-      alert("حدث خطأ أثناء معالجة الملفات أو توليد الأسئلة. تأكد من أن الملفات تحتوي على نص طبي واضح.");
+      alert("حدث خطأ أثناء معالجة الملفات. تأكد من جودة النص في الملفات المرفوعة.");
     } finally {
       setLoading(false);
       setLoadingStatus("");
@@ -358,10 +358,10 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
               <input type="file" multiple accept=".pdf,.txt" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setFiles(Array.from(e.target.files || []))} />
               <div className="text-7xl mb-4 group-hover:scale-110 transition-transform">📁</div>
               <p className="font-black text-indigo-600 text-lg">{strings.uploadFiles}</p>
-              <p className="text-xs text-slate-400 mt-2 font-bold">{files.length > 0 ? `${files.length} ملفات جاهزة` : 'يدعم PDF و TXT'}</p>
+              <p className="text-xs text-slate-400 mt-2 font-bold">{files.length > 0 ? `${files.length} ملفات جاهزة` : 'يدعم PDF و TXT لأي محتوى'}</p>
             </div>
             <div className="space-y-2">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">المادة العلمية</label>
+               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">تصنيف الاختبار</label>
                <select value={subId} onChange={e => setSubId(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none outline-none text-slate-600 shadow-inner">
                  {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                </select>
@@ -415,7 +415,7 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
           {loading ? (
             <>
               <span className="animate-pulse">{loadingStatus}</span>
-              <span className="text-xs font-normal mt-2 opacity-70 italic">هذه العملية تتم بقوة Gemini AI 3.0</span>
+              <span className="text-xs font-normal mt-2 opacity-70 italic">هذه العملية تتم بقوة Gemini AI الذكي</span>
             </>
           ) : strings.generateQuiz}
         </button>
@@ -519,7 +519,7 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
 
         {showExpl && (
           <div className="mt-12 p-10 bg-indigo-50 rounded-[3rem] border border-indigo-100 animate-in slide-in-from-top-4 duration-500">
-             <h4 className="font-black text-indigo-800 mb-3 flex items-center gap-2 text-lg">💡 الشرح العلمي:</h4>
+             <h4 className="font-black text-indigo-800 mb-3 flex items-center gap-2 text-lg">💡 الشرح:</h4>
              <p className="text-indigo-900/70 font-bold leading-relaxed text-lg">{current.explanation}</p>
           </div>
         )}
@@ -567,15 +567,15 @@ const App = () => {
   const [isLoginModalOpen, setLoginModalOpen] = useState(false);
   const [user, setUser] = useState(() => {
     const s = localStorage.getItem('mq_user');
-    return s ? JSON.parse(s) : { id: 'anon', name: 'Dr. Anonymous', photo: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', isLoggedIn: false };
+    return s ? JSON.parse(s) : { id: 'anon', name: 'Anonymous User', photo: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', isLoggedIn: false };
   });
 
   const [subjects, setSubjects] = useState<Subject[]>(() => {
     const s = localStorage.getItem('mq_subjects');
     return s ? JSON.parse(s) : [
-      { id: '1', name: 'الباطنة العامة', chapters: [] },
-      { id: '2', name: 'الجراحة العامة', chapters: [] },
-      { id: '3', name: 'الأطفال', chapters: [] }
+      { id: '1', name: 'العلوم العامة', chapters: [] },
+      { id: '2', name: 'اللغات والآداب', chapters: [] },
+      { id: '3', name: 'التكنولوجيا', chapters: [] }
     ];
   });
 
@@ -597,7 +597,7 @@ const App = () => {
   const handleLogin = (data: any) => {
     const newUser = { 
       id: 'user-' + Date.now(), 
-      name: `د. ${data.name}`, 
+      name: data.name, 
       photo: `https://i.pravatar.cc/150?u=${data.name}`, 
       isLoggedIn: true,
       role: data.role,
@@ -609,7 +609,7 @@ const App = () => {
 
   const handleLogout = () => {
     if (window.confirm('هل تريد تسجيل الخروج؟')) {
-      setUser({ id: 'anon', name: 'Dr. Anonymous', photo: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', isLoggedIn: false });
+      setUser({ id: 'anon', name: 'Anonymous User', photo: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', isLoggedIn: false });
     }
   };
 
@@ -623,8 +623,8 @@ const App = () => {
             <Route path="/create" element={<CreateQuiz strings={TRANSLATIONS[lang]} subjects={subjects} quizzes={quizzes} setQuizzes={setQuizzes} />} />
             <Route path="/quiz/:quizId" element={<QuizInterface strings={TRANSLATIONS[lang]} setAttempts={setAttempts} quizzes={quizzes} user={user} />} />
             <Route path="/import" element={<ImportQuiz quizzes={quizzes} setQuizzes={setQuizzes} />} />
-            <Route path="/stats" element={<div className="text-center font-black py-20 text-slate-300 text-3xl">قريباً: تحليلات الأداء المتقدمة للمتخصصين 🩺</div>} />
-            <Route path="/leaderboard" element={<div className="text-center font-black py-20 text-slate-300 text-3xl">قريباً: المنافسة العالمية بين الأطباء 🏆</div>} />
+            <Route path="/stats" element={<div className="text-center font-black py-20 text-slate-300 text-3xl">قريباً: تحليلات الأداء المتقدمة 📊</div>} />
+            <Route path="/leaderboard" element={<div className="text-center font-black py-20 text-slate-300 text-3xl">قريباً: لوحة المتصدرين العالمية 🏆</div>} />
           </Routes>
         </main>
         <LoginModal 
