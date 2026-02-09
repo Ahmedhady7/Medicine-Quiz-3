@@ -7,7 +7,7 @@ import {
 import * as pdfjsLib from 'pdfjs-dist';
 import { TRANSLATIONS } from './constants';
 import { Difficulty, QuestionType, User, Subject, Quiz, QuizAttempt } from './types';
-import { generateMedicalQuestions } from './services/geminiService';
+import { generateQuizQuestions } from './services/geminiService';
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
@@ -75,7 +75,7 @@ const Navbar = ({ lang, setLang, user, onLogin, onLogout }: any) => {
           </div>
         ) : (
           <button onClick={onLogin} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-full shadow-lg hover:shadow-indigo-200 transition-all active:scale-95 text-sm font-black">
-            تسجيل الدخول / إنشاء حساب
+            دخول / إنشاء حساب
           </button>
         )}
       </div>
@@ -325,7 +325,7 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
       }
       
       setLoadingStatus("الذكاء الاصطناعي يقوم ببناء الأسئلة من المحتوى...");
-      const questions = await generateMedicalQuestions(content, count, type, diff, targetLang as any);
+      const questions = await generateQuizQuestions(content, count, type, diff, targetLang as any);
       
       const newQuiz: Quiz = {
         id: Math.random().toString(36).substr(2, 9),
@@ -339,9 +339,9 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
       
       setQuizzes([...quizzes, newQuiz]);
       navigate(`/quiz/${newQuiz.id}`);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("حدث خطأ أثناء معالجة الملفات. تأكد من جودة النص في الملفات المرفوعة.");
+      alert(e.message || "حدث خطأ أثناء معالجة الملفات. تأكد من جودة النص في الملفات المرفوعة.");
     } finally {
       setLoading(false);
       setLoadingStatus("");
@@ -415,7 +415,7 @@ const CreateQuiz = ({ strings, subjects, quizzes, setQuizzes }: any) => {
           {loading ? (
             <>
               <span className="animate-pulse">{loadingStatus}</span>
-              <span className="text-xs font-normal mt-2 opacity-70 italic">هذه العملية تتم بقوة Gemini AI الذكي</span>
+              <span className="text-xs font-normal mt-2 opacity-70 italic">هذه العملية تتم بقوة Gemini 3 الذكي</span>
             </>
           ) : strings.generateQuiz}
         </button>
