@@ -2,7 +2,8 @@
 export enum Difficulty {
   EASY = 'easy',
   MEDIUM = 'medium',
-  HARD = 'hard'
+  HARD = 'hard',
+  VERY_HARD = 'very_hard'
 }
 
 export enum QuestionType {
@@ -52,6 +53,14 @@ export interface QuizAttempt {
   date: number;
 }
 
+// Added missing User interface to fix import error in App.tsx
+export interface User {
+  id: string;
+  name: string;
+  photo: string;
+  isLoggedIn: boolean;
+}
+
 export interface LanguageStrings {
   title: string;
   uploadFiles: string;
@@ -64,6 +73,7 @@ export interface LanguageStrings {
   easy: string;
   medium: string;
   hard: string;
+  veryHard: string;
   mcq: string;
   tf: string;
   mix: string;
@@ -77,4 +87,13 @@ export interface LanguageStrings {
   toArabic: string;
   toEnglish: string;
   original: string;
+  back: string;
+  login: string;
+  logout: string;
+  welcome: string;
+  importQuiz: string;
+  copySuccess: string;
+  // Added missing keys used in QuizInterface
+  next: string;
+  finish: string;
 }
