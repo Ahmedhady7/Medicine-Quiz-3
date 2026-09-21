@@ -9,6 +9,9 @@ export enum Difficulty {
 export enum QuestionType {
   MCQ = 'mcq',
   TRUE_FALSE = 'true_false',
+  MULTIPLE_SELECT = 'multiple_select',
+  SHORT_ANSWER = 'short_answer',
+  PRACTICAL = 'practical',
   MIX = 'mix'
 }
 
@@ -16,9 +19,11 @@ export interface Question {
   id: string;
   text: string;
   options?: string[];
-  correctAnswer: string;
+  correctAnswer: string | string[]; // Can be string for single, or array for multiple
   explanation: string;
   type: QuestionType;
+  imageUrl?: string;
+  imageAlt?: string;
 }
 
 export interface Quiz {
@@ -28,6 +33,7 @@ export interface Quiz {
   chapterId: string;
   difficulty: Difficulty;
   questions: Question[];
+  passingScore: number;
   createdAt: number;
 }
 
@@ -53,12 +59,20 @@ export interface QuizAttempt {
   date: number;
 }
 
-// Added missing User interface to fix import error in App.tsx
 export interface User {
   id: string;
   name: string;
   photo: string;
   isLoggedIn: boolean;
+}
+
+declare global {
+  interface Window {
+    aistudio: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
+  }
 }
 
 export interface LanguageStrings {
@@ -88,12 +102,36 @@ export interface LanguageStrings {
   toEnglish: string;
   original: string;
   back: string;
+  home: string;
   login: string;
   logout: string;
   welcome: string;
   importQuiz: string;
   copySuccess: string;
-  // Added missing keys used in QuizInterface
+  clearCache: string;
+  exportData: string;
+  importData: string;
+  explanation: string;
+  modelAnswer: string;
+  quizTitle: string;
+  passingScore: string;
+  pass: string;
+  fail: string;
+  rename: string;
+  delete: string;
+  addCategory: string;
+  categoryName: string;
+  uncategorized: string;
+  mcqRatio: string;
   next: string;
   finish: string;
+  multipleSelect: string;
+  selectRequired: string;
+  checkAnswer: string;
+  shortAnswer: string;
+  practical: string;
+  writeAnswer: string;
+  practiceTitle: string;
+  switchToMCQ: string;
+  switchToType: string;
 }
