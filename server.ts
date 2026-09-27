@@ -13,18 +13,24 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
-
-const ai = new GoogleGenAI({
-  apiKey,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    },
-  },
-});
-
 app.post('/api/generate-quiz', async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+
+  if (!apiKey || apiKey.trim() === '') {
+    const keyError = "Missing Gemini API key: process.env.GEMINI_API_KEY is not defined or is empty on the server.";
+    console.error(keyError);
+    return res.status(500).json({ error: keyError });
+  }
+
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+
   try {
     const {
       fileContent,
@@ -36,6 +42,8 @@ app.post('/api/generate-quiz', async (req, res) => {
       mcqRatio = 50,
       enabledTypes,
     } = req.body;
+
+    const requestedCount = Math.max(1, Number(count) || 1);
 
     const difficultyInstruction: Record<string, string> = {
       easy: 'Basic facts and direct content.',
@@ -57,7 +65,7 @@ app.post('/api/generate-quiz', async (req, res) => {
             return t;
           })
           .join(', ');
-        typeDescription = `You MUST ONLY generate questions of the following types: [${formattedTypes}]. Absolutely no other type of questions should be generated. Try to distribute the ${count} questions as evenly as possible among these selected types.`;
+        typeDescription = `You MUST ONLY generate questions of the following types: [${formattedTypes}]. Absolutely no other type of questions should be generated. Distribute the ${requestedCount} question(s) evenly among these selected types.`;
       } else {
         typeDescription = `Mix of MCQ, True/False, and MULTIPLE_SELECT. Aim for approximately ${mcqRatio}% MCQ/MultipleSelect and ${100 - mcqRatio}% True/False.`;
       }
@@ -73,22 +81,23 @@ app.post('/api/generate-quiz', async (req, res) => {
 
     const prompt = `
       Role: World-Class Academic Examiner.
-      Objective: Generate exactly ${count} professional questions based ON ALL the provided context (Text and Images).
+      Objective: Generate exactly ${requestedCount} question(s) based ON ALL the provided context (Text and Images).
 
       CONTEXT STRUCTURE:
       - Text Context: Contains one or more documents.
       - Image Context: ${images.length > 0 ? `${images.length} images provided.` : 'No images provided.'}
 
       CRITICAL INSTRUCTIONS:
-      1. EQUAL REPRESENTATION: Distribute the total count (${count}) as equally as possible among all identified sources (files/images).
-      2. VISUAL QUESTIONS: If images are provided, generate questions that refer ONLY to visual details in the images (e.g., Identifying anatomical structures, histological slides, clinical findings). 
-      3. TEXT IS REDACTED: All text labels and titles have been whited out from the provided images to prevent spoilers. You MUST generate questions that test visual recognition. Use the "Text Context" provided separately to know the subject matter, but ensure the student must look at the image features to answer.
-      4. NO TEXTUAL SPOILERS: Do NOT create questions that can be answered by simply reading any text potentially remaining in the image.
-      5. QUESTION VARIETY: 
+      1. EXACT COUNT: You must generate an array containing EXACTLY ${requestedCount} question object(s).
+      2. EQUAL REPRESENTATION: Distribute the total count (${requestedCount}) as equally as possible among all identified sources (files/images).
+      3. VISUAL QUESTIONS: If images are provided, generate questions that refer ONLY to visual details in the images (e.g., Identifying anatomical structures, histological slides, clinical findings). 
+      4. TEXT IS REDACTED: All text labels and titles have been whited out from the provided images to prevent spoilers. You MUST generate questions that test visual recognition. Use the "Text Context" provided separately to know the subject matter, but ensure the student must look at the image features to answer.
+      5. NO TEXTUAL SPOILERS: Do NOT create questions that can be answered by simply reading any text potentially remaining in the image.
+      6. QUESTION VARIETY: 
          - Type: ${typeDescription}.
          - Difficulty: ${difficulty} (${difficultyInstruction[difficulty] || difficulty}).
-      6. SHUFFLE ORDER: Randomize the order of questions.
-      7. LANGUAGE: ${targetLanguage === 'original' ? 'Same as the source language' : targetLanguage}.
+      7. SHUFFLE ORDER: Randomize the order of questions.
+      8. LANGUAGE: ${targetLanguage === 'original' ? 'Same as the source language' : targetLanguage}.
       
       Rules:
       1. For MULTIPLE_SELECT: "correctAnswer" must be an array of all correct options.
@@ -160,9 +169,9 @@ app.post('/api/generate-quiz', async (req, res) => {
         let rawText = response.text || '';
         // Clean markdown backticks if any
         if (rawText.startsWith('```json')) {
-          rawText = rawText.replace(/^```json\s*/, '').replace(/```\s*$/, '');
+          rawText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '');
         } else if (rawText.startsWith('```')) {
-          rawText = rawText.replace(/^```\s*/, '').replace(/```\s*$/, '');
+          rawText = rawText.replace(/^```\s*/i, '').replace(/```\s*$/i, '');
         }
 
         parsedQuestions = JSON.parse(rawText.trim() || '[]');
@@ -171,13 +180,15 @@ app.post('/api/generate-quiz', async (req, res) => {
           break;
         }
       } catch (err: any) {
-        console.warn(`Model ${modelName} failed or returned error:`, err?.status || err?.message || err);
+        console.error(`Model ${modelName} error:`, err);
         lastError = err;
       }
     }
 
     if (!parsedQuestions || parsedQuestions.length === 0) {
-      throw lastError || new Error("لم نتمكن من توليد أسئلة من الملفات المدخلة. حاول تقليل عدد الأسئلة أو التأكد من محتوى الملف.");
+      const detailError = lastError?.message || (typeof lastError === 'string' ? lastError : JSON.stringify(lastError)) || "Could not generate questions from the provided content.";
+      console.error("All candidate models failed. Last error:", detailError);
+      return res.status(500).json({ error: detailError });
     }
 
     const questions = parsedQuestions.map((q, i) => {
@@ -204,10 +215,11 @@ app.post('/api/generate-quiz', async (req, res) => {
       };
     });
 
-    res.json({ questions });
+    return res.json({ questions });
   } catch (error: any) {
-    console.error('Gemini Server Error:', error);
-    res.status(500).json({ error: error.message || 'حدث خطأ في توليد الأسئلة. حاول تقليل عددها أو تغيير الملف.' });
+    console.error("Exact backend error during quiz generation:", error);
+    const rawError = error?.message || (typeof error === 'string' ? error : JSON.stringify(error)) || "Unknown error occurred";
+    return res.status(500).json({ error: rawError });
   }
 });
 

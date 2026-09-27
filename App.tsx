@@ -7,7 +7,7 @@ import {
   BarChart, Bar, Cell, PieChart, Pie, Legend, AreaChart, Area 
 } from 'recharts';
 import { TRANSLATIONS } from './constants';
-import { Difficulty, QuestionType, User, Subject, Quiz, QuizAttempt } from './types';
+import { Difficulty, QuestionType, User, Subject, Quiz, QuizAttempt, Question } from './types';
 import { generateQuizQuestions } from './services/geminiService';
 
 // إعداد عامل الـ PDF بشكل مستقر
@@ -43,7 +43,7 @@ const processFilesForGemini = async (files: File[], type: QuestionType, enabledT
   const isPractical = type === QuestionType.PRACTICAL || (type === QuestionType.MIX && (!enabledTypes || enabledTypes.includes(QuestionType.PRACTICAL)));
   
   for (const file of files) {
-    if (file.type === "application/pdf") {
+    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
       combinedText += `\n--- START OF PDF: ${file.name} ---\n`;
       try {
         const arrayBuffer = await file.arrayBuffer();
@@ -58,51 +58,50 @@ const processFilesForGemini = async (files: File[], type: QuestionType, enabledT
           
           // If practical, render pages as images (limit to reasonable number)
           if (isPractical && i <= 15) {
-            const viewport = page.getViewport({ scale: 2.0 }); // Higher resolution
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            await page.render({ canvasContext: context!, viewport }).promise;
-            
-            // Aggressive Text Redaction for Practical Exams (and Mixed exams with practical parts)
-            if (isPractical) {
+            try {
+              const viewport = page.getViewport({ scale: 2.0 }); // Higher resolution
+              const canvas = document.createElement('canvas');
+              const context = canvas.getContext('2d');
+              canvas.height = viewport.height;
+              canvas.width = viewport.width;
+              await page.render({ canvasContext: context!, viewport }).promise;
+              
+              if (isPractical) {
                 // White out top and bottom common header/footer zones first
                 context!.fillStyle = "white";
                 context!.fillRect(0, 0, canvas.width, canvas.height * 0.15); // Top 15%
                 context!.fillRect(0, canvas.height * 0.88, canvas.width, canvas.height * 0.12); // Bottom 12%
 
-                // Optional: For even more precision, white out individual text items
-                // Note: We use the already fetched textContent
                 textContent.items.forEach((item: any) => {
                   if (item.str && item.str.trim().length > 0) {
                     const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-                    // Simplify: white out a box around the text
-                    // item.width and height are in PDF units, need scaling
                     const width = item.width * viewport.scale;
-                    const height = item.height * viewport.scale || 15 * viewport.scale; // Fallback height
-                    
-                    // The transform gives us the baseline. PDF coordinates are Y-up.
-                    // viewport.transform maps PDF to Canvas.
+                    const height = item.height * viewport.scale || 15 * viewport.scale;
                     context!.fillStyle = "white";
-                    // Add some padding to redaction
                     context!.fillRect(tx[4] - 5, tx[5] - height - 5, width + 10, height + 10);
                   }
                 });
-            }
-            
-            const base64 = canvas.toDataURL('image/jpeg', 0.8);
-            images.push({
-              inlineData: {
-                data: base64.split(',')[1],
-                mimeType: 'image/jpeg'
               }
-            });
+              
+              const base64 = canvas.toDataURL('image/jpeg', 0.8);
+              images.push({
+                inlineData: {
+                  data: base64.split(',')[1],
+                  mimeType: 'image/jpeg'
+                }
+              });
+            } catch (canvasErr) {
+              console.warn("Could not capture page image for slide", canvasErr);
+            }
           }
+        }
+        if (!pdfText.trim() && images.length === 0) {
+          throw new Error("Could not read text from file");
         }
         combinedText += pdfText;
       } catch (e) {
-        console.error("PDF Error:", file.name, e);
+        console.error("PDF Parsing Error:", file.name, e);
+        throw new Error("Could not read text from file");
       }
       combinedText += `\n--- END OF PDF: ${file.name} ---\n`;
     } else if (file.type.startsWith("image/")) {
@@ -116,14 +115,28 @@ const processFilesForGemini = async (files: File[], type: QuestionType, enabledT
         });
       } catch (e) {
         console.error("Image Error:", file.name, e);
+        throw new Error("Could not read text from file");
       }
     } else {
-      combinedText += `\n--- START OF FILE: ${file.name} ---\n`;
-      const text = await file.text();
-      combinedText += text + "\n";
-      combinedText += `\n--- END OF FILE: ${file.name} ---\n`;
+      try {
+        combinedText += `\n--- START OF FILE: ${file.name} ---\n`;
+        const text = await file.text();
+        if (!text.trim()) {
+          throw new Error("Could not read text from file");
+        }
+        combinedText += text + "\n";
+        combinedText += `\n--- END OF FILE: ${file.name} ---\n`;
+      } catch (e) {
+        console.error("Text file reading error:", file.name, e);
+        throw new Error("Could not read text from file");
+      }
     }
   }
+
+  if (!combinedText.trim() && images.length === 0) {
+    throw new Error("Could not read text from file");
+  }
+
   return { text: combinedText.trim(), images };
 };
 
@@ -134,7 +147,7 @@ const extractTextFromFiles = async (files: File[]): Promise<string> => {
 
 /** --- Components --- */
 
-const Navbar = ({ lang, setLang, user }: { lang: 'en' | 'ar', setLang: any, user: any }) => {
+const Navbar = ({ lang, setLang, user, mistakesCount = 0 }: { lang: 'en' | 'ar', setLang: any, user: any, mistakesCount?: number }) => {
   const strings = TRANSLATIONS[lang];
   const navigate = useNavigate();
   const location = useLocation();
@@ -152,13 +165,14 @@ const Navbar = ({ lang, setLang, user }: { lang: 'en' | 'ar', setLang: any, user
       quizzes: JSON.parse(localStorage.getItem('mq_quizzes_v5') || '[]'),
       attempts: JSON.parse(localStorage.getItem('mq_attempts_v5') || '[]'),
       subjects: JSON.parse(localStorage.getItem('mq_subjects_v5') || '[]'),
+      mistakes: JSON.parse(localStorage.getItem('studybuddy_mistakes_v1') || '[]'),
       version: 'v5'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `medicine_quiz_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `studybuddy_backup_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -175,6 +189,7 @@ const Navbar = ({ lang, setLang, user }: { lang: 'en' | 'ar', setLang: any, user
           localStorage.setItem('mq_quizzes_v5', JSON.stringify(data.quizzes));
           localStorage.setItem('mq_attempts_v5', JSON.stringify(data.attempts || []));
           localStorage.setItem('mq_subjects_v5', JSON.stringify(data.subjects || []));
+          if (data.mistakes) localStorage.setItem('studybuddy_mistakes_v1', JSON.stringify(data.mistakes));
           alert("تم استيراد البيانات بنجاح! سيتم إعادة تحميل الصفحة.");
           window.location.reload();
         } else {
@@ -188,20 +203,44 @@ const Navbar = ({ lang, setLang, user }: { lang: 'en' | 'ar', setLang: any, user
   };
 
   return (
-    <nav className={`bg-white/80 backdrop-blur-md border-b sticky top-0 z-50 px-4 md:px-8 py-3 flex justify-between items-center ${lang === 'ar' ? 'rtl' : ''}`}>
-      <div className="flex items-center gap-4">
+    <nav className={`bg-white/85 backdrop-blur-md border-b sticky top-0 z-50 px-4 md:px-8 py-3.5 flex justify-between items-center shadow-sm ${lang === 'ar' ? 'rtl' : ''}`}>
+      <div className="flex items-center gap-3">
         {!isHome && (
           <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-indigo-600 font-bold">
             {lang === 'ar' ? '→' : '←'} {strings.back}
           </button>
         )}
-        <h1 onClick={() => navigate('/')} className="text-xl md:text-2xl font-black text-indigo-600 cursor-pointer flex items-center gap-2">
-          <span className="text-3xl">✨</span> <span className="hidden sm:inline">{strings.title}</span>
+        <h1 onClick={() => navigate('/')} className="text-xl md:text-2xl font-black text-indigo-600 cursor-pointer flex items-center gap-2 hover:opacity-90 transition-opacity">
+          <span className="text-3xl">🎓</span> 
+          <span className="tracking-tight font-extrabold bg-gradient-to-r from-indigo-600 to-indigo-800 bg-clip-text text-transparent">StudyBuddy</span>
         </h1>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="hidden lg:flex items-center gap-2 border-r pr-3 mr-1">
+      <div className="flex items-center gap-2 md:gap-3">
+        {mistakesCount > 0 && (
+          <button 
+            onClick={() => {
+              if (location.pathname !== '/') {
+                navigate('/');
+                setTimeout(() => {
+                  const el = document.getElementById('review-mode-card');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              } else {
+                const el = document.getElementById('review-mode-card');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
+            title="وضع المراجعة" 
+            className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-xl border border-rose-200/80 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm"
+          >
+            <span>🎯</span>
+            <span className="hidden sm:inline">المراجعة</span>
+            <span className="bg-rose-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">{mistakesCount}</span>
+          </button>
+        )}
+
+        <div className="hidden lg:flex items-center gap-1 border-r pr-2 mr-1">
           <button onClick={handleExportData} title={strings.exportData} className="p-2 text-slate-500 hover:text-indigo-600 transition-colors text-xs font-bold flex items-center gap-1">
             📤 {strings.exportData}
           </button>
@@ -217,10 +256,10 @@ const Navbar = ({ lang, setLang, user }: { lang: 'en' | 'ar', setLang: any, user
         >
           🗑️ <span className="hidden lg:inline">{strings.clearCache}</span>
         </button>
-        <button onClick={() => navigate('/stats')} className="p-2 text-slate-500 hover:text-indigo-600 font-bold text-sm flex items-center gap-1">
+        <button onClick={() => navigate('/stats')} className="p-2 text-slate-600 hover:text-indigo-600 font-bold text-sm flex items-center gap-1">
           📊 <span className="hidden sm:inline">{strings.stats}</span>
         </button>
-        <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="text-xs font-bold text-slate-500 hover:text-indigo-600 border px-3 py-1 rounded-full">
+        <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="text-xs font-bold text-slate-500 hover:text-indigo-600 border px-3 py-1.5 rounded-full">
           {lang === 'en' ? 'العربية' : 'English'}
         </button>
       </div>
@@ -356,12 +395,45 @@ const StatsDashboard = ({ attempts, quizzes, strings, lang }: any) => {
 
 /** --- Views --- */
 
-const Dashboard = ({ strings, quizzes, setQuizzes, subjects, setSubjects, lang }: any) => {
+const Dashboard = ({ strings, quizzes, setQuizzes, subjects, setSubjects, lang, user, mistakes = [], setMistakes }: any) => {
   const navigate = useNavigate();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [isAddingSubject, setIsAddingSubject] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState("");
+  const [showMistakesList, setShowMistakesList] = useState(false);
+
+  const handleStartMistakesQuiz = () => {
+    if (!mistakes || mistakes.length === 0) {
+      return alert(lang === 'ar' ? "لا توجد أسئلة في بنك الأخطاء حالياً!" : "No mistake questions in the bank!");
+    }
+    const reviewQuizId = `review-session-${Date.now()}`;
+    const reviewQuiz: Quiz = {
+      id: reviewQuizId,
+      title: lang === 'ar' ? `🎯 مراجعة الأخطاء المكثفة (${mistakes.length} أسئلة)` : `🎯 Mistakes Review Session (${mistakes.length} Qs)`,
+      subjectId: '',
+      chapterId: '',
+      difficulty: Difficulty.MEDIUM,
+      questions: [...mistakes],
+      passingScore: 70,
+      createdAt: Date.now()
+    };
+    setQuizzes((prev: Quiz[]) => [reviewQuiz, ...prev.filter(q => !q.id.startsWith('review-session-'))]);
+    navigate(`/quiz/${reviewQuizId}`);
+  };
+
+  const handleRemoveMistake = (id: string) => {
+    if (confirm(lang === 'ar' ? "هل تريد إزالة هذا السؤال من بنك الأخطاء؟" : "Remove this question from mistakes bank?")) {
+      setMistakes((prev: Question[]) => prev.filter(m => m.id !== id));
+    }
+  };
+
+  const handleClearMistakes = () => {
+    if (confirm(lang === 'ar' ? "هل أنت متأكد من رغبتك في تفريغ بنك الأخطاء بالكامل؟" : "Clear all questions from mistakes bank?")) {
+      setMistakes([]);
+      setShowMistakesList(false);
+    }
+  };
 
   const handleShare = (e: React.MouseEvent, quiz: Quiz) => {
     e.stopPropagation();
@@ -475,17 +547,164 @@ const Dashboard = ({ strings, quizzes, setQuizzes, subjects, setSubjects, lang }
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <Card className="bg-gradient-to-br from-indigo-600 to-indigo-800 text-white relative overflow-hidden group">
-        <div className="relative z-10 p-4">
-          <h2 className="text-3xl font-black mb-2">Welcome Dr Hady ✨</h2>
-          <p className="text-indigo-100 font-bold mb-8">أهلاً بك في كويز برو! حول ملفاتك الدراسية إلى اختبارات ذكية فوراً.</p>
-          <div className="flex gap-4">
-            <button onClick={() => navigate('/create')} className="px-10 py-5 bg-white text-indigo-600 rounded-2xl font-black shadow-2xl hover:scale-105 transition-all">بدء توليد جديد ✨</button>
-            <button onClick={() => navigate('/stats')} className="px-6 py-5 bg-indigo-500/30 text-white border border-white/20 rounded-2xl font-black hover:bg-indigo-500/50 transition-all">النتائج 📊</button>
+      <Card className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-900 text-white relative overflow-hidden group shadow-xl">
+        <div className="relative z-10 p-6 md:p-8">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-black uppercase tracking-wider">
+              StudyBuddy 🎓
+            </span>
+            <span className="text-indigo-200 text-xs font-bold">رفيقك الذكي للدراسة والمراجعة</span>
+          </div>
+          <h2 className="text-3xl md:text-4xl font-black mb-3 text-white">مرحباً بك في StudyBuddy ✨</h2>
+          <p className="text-indigo-100 font-bold mb-8 max-w-2xl text-sm md:text-base leading-relaxed">
+            حوّل مذكراتك وملفاتك (PDF/صور/نصوص) إلى اختبارات تفاعلية ذكية، وراجع جميع أخطائك السابقة في مكان واحد باحترافية.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button onClick={() => navigate('/create')} className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black text-sm shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+              <span>🚀</span> بدء توليد اختبار جديد
+            </button>
+            {mistakes && mistakes.length > 0 && (
+              <button onClick={handleStartMistakesQuiz} className="px-6 py-4 bg-rose-500 text-white rounded-2xl font-black text-sm shadow-xl hover:bg-rose-600 hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+                <span>🎯</span> تدريب الأخطاء ({mistakes.length})
+              </button>
+            )}
+            <button onClick={() => navigate('/stats')} className="px-6 py-4 bg-indigo-500/30 text-white border border-white/20 rounded-2xl font-black text-sm hover:bg-indigo-500/50 transition-all flex items-center gap-2">
+              <span>📊</span> الإحصائيات
+            </button>
           </div>
         </div>
-        <div className="absolute -bottom-10 -right-10 text-9xl opacity-20 group-hover:rotate-12 transition-transform">🎓</div>
+        <div className="absolute -bottom-10 -right-10 text-9xl opacity-15 group-hover:rotate-12 transition-transform select-none pointer-events-none">🎓</div>
       </Card>
+
+      {/* Review Mode Section */}
+      <div id="review-mode-card" className="space-y-4">
+        <div className="flex items-center justify-between px-2">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">🎯</span>
+            <h3 className="text-xl font-black text-slate-800">وضع المراجعة المكثف (Review Mode)</h3>
+            <span className={`text-xs px-2.5 py-0.5 rounded-full font-black ${mistakes.length > 0 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
+              {mistakes.length} أسئلة
+            </span>
+          </div>
+          {mistakes.length > 0 && (
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setShowMistakesList(!showMistakesList)} 
+                className="text-xs font-black text-indigo-600 hover:underline"
+              >
+                {showMistakesList ? 'إخفاء القائمة 🔼' : 'استعراض الأسئلة 📋'}
+              </button>
+              <button 
+                onClick={handleClearMistakes} 
+                className="text-xs font-bold text-slate-400 hover:text-rose-600 transition-colors"
+                title="تفريغ بنك الأخطاء"
+              >
+                مسح الكل 🗑️
+              </button>
+            </div>
+          )}
+        </div>
+
+        {mistakes.length === 0 ? (
+          <Card className="p-6 bg-gradient-to-r from-emerald-50/60 to-indigo-50/60 border border-emerald-100/70 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4 text-right">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-2xl flex-shrink-0">
+                ✨
+              </div>
+              <div>
+                <h4 className="font-black text-slate-800 text-base">بنك المراجعة فارغ وجاهز!</h4>
+                <p className="text-slate-500 font-bold text-xs mt-0.5">
+                  جميع الأسئلة التي تجيب عليها بشكل خاطئ في أي اختبار، ستتجمع هنا تلقائياً لتتدرب عليها بشكل مكثف.
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => navigate('/create')} 
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs shadow-sm transition-all whitespace-nowrap"
+            >
+              ابدأ اختبارك الأول 🚀
+            </button>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            <Card className="p-6 md:p-8 bg-gradient-to-br from-rose-50 via-white to-indigo-50/40 border-2 border-rose-200/90 rounded-[2.5rem] shadow-sm">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-rose-600 text-white text-xs font-black rounded-lg">تجميع تلقائي</span>
+                    <span className="text-xs font-black text-slate-400">جمع {mistakes.length} سؤال خاطئ من اختباراتك السابقة</span>
+                  </div>
+                  <h4 className="text-2xl font-black text-slate-800">
+                    لديك {mistakes.length} {mistakes.length === 1 ? 'سؤال يحتاج' : 'أسئلة تحتاج'} إلى تثبيت ومراجعة
+                  </h4>
+                  <p className="text-slate-500 font-bold text-xs leading-relaxed max-w-2xl">
+                    يتيح لك وضع المراجعة إعادة خوض كل الأسئلة التي تعثرت فيها في جلسة تدريب تفاعلية واحدة ومكثفة لضمان إتقانها 100%.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3 w-full md:w-auto">
+                  <button 
+                    onClick={handleStartMistakesQuiz}
+                    className="flex-1 md:flex-none px-8 py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black text-base shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    <span>🎯</span> بدء تدريب الأخطاء الآن
+                  </button>
+                  <button 
+                    onClick={() => setShowMistakesList(!showMistakesList)} 
+                    className="px-5 py-4 bg-white border-2 border-slate-200 text-slate-700 hover:bg-slate-50 rounded-2xl font-black text-sm transition-all"
+                  >
+                    {showMistakesList ? 'إخفاء الأسئلة 🔼' : 'استعراض الأسئلة 📋'}
+                  </button>
+                </div>
+              </div>
+            </Card>
+
+            {showMistakesList && (
+              <div className="space-y-3 animate-in fade-in slide-in-from-top-3 duration-300">
+                {mistakes.map((q: Question, idx: number) => (
+                  <Card key={q.id || idx} className="p-5 border border-slate-100 hover:border-indigo-100 rounded-2xl space-y-3">
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex items-start gap-3 flex-1">
+                        <span className="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 font-black text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          {q.sourceQuizTitle && (
+                            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-wider block mb-1">
+                              من اختبار: {q.sourceQuizTitle}
+                            </span>
+                          )}
+                          <h5 className="font-black text-slate-800 text-base leading-snug">{q.text}</h5>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => handleRemoveMistake(q.id)}
+                        className="p-1.5 text-slate-300 hover:text-rose-600 transition-colors text-sm font-black"
+                        title="إزالة هذا السؤال من بنك الأخطاء"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs">
+                      <span className="font-black text-emerald-800 block mb-0.5">✅ الإجابة النموذجية:</span>
+                      <p className="font-black text-emerald-950">
+                        {Array.isArray(q.correctAnswer) ? q.correctAnswer.join(' | ') : q.correctAnswer}
+                      </p>
+                    </div>
+
+                    {q.explanation && (
+                      <p className="text-xs text-slate-500 leading-relaxed font-bold bg-slate-50 p-3 rounded-xl">
+                        💡 <span className="font-black text-slate-700">التوضيح:</span> {q.explanation}
+                      </p>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="flex justify-between items-center px-2">
         <div className="flex items-center gap-3">
@@ -850,12 +1069,17 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes, subjects }: any) => {
           </div>
         </div>
         {errorMsg && (
-          <div className="mt-6 p-4 bg-rose-50 border-2 border-rose-200 text-rose-700 rounded-2xl font-black text-sm flex items-center justify-between animate-in fade-in">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">⚠️</span>
-              <span>{errorMsg}</span>
+          <div className="mt-6 p-5 bg-rose-50 border-2 border-rose-300 text-rose-800 rounded-3xl font-bold text-sm flex items-start justify-between gap-4 animate-in fade-in">
+            <div className="flex items-start gap-3 flex-1">
+              <span className="text-2xl flex-shrink-0">⚠️</span>
+              <div className="space-y-1.5 flex-1 min-w-0">
+                <p className="font-black text-rose-900 text-base">حدث خطأ أثناء معالجة الملفات أو توليد الاختبار:</p>
+                <div className="font-mono text-xs bg-white/90 p-3 rounded-xl border border-rose-200 text-rose-950 break-words select-all shadow-inner">
+                  {errorMsg}
+                </div>
+              </div>
             </div>
-            <button onClick={() => setErrorMsg('')} className="p-1 hover:bg-rose-100 rounded-lg text-rose-500 font-black">✕</button>
+            <button onClick={() => setErrorMsg('')} className="p-1.5 hover:bg-rose-100 rounded-xl text-rose-500 font-black">✕</button>
           </div>
         )}
 
@@ -867,7 +1091,7 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes, subjects }: any) => {
   );
 };
 
-const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
+const QuizInterface = ({ strings, setAttempts, quizzes, user, mistakes, setMistakes }: any) => {
   const { quizId } = useParams();
   const navigate = useNavigate();
   const [cur, setCur] = useState(0);
@@ -942,6 +1166,30 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
         score, totalQuestions: quiz.questions.length, timeSpent: Math.round((Date.now() - start)/60000), date: Date.now()
       };
       setAttempts((p: any) => [...p, attempt]);
+
+      // Handle mistakes bank recording
+      const wrongQs = quiz.questions.filter((q: any) => !isCorrect(q, ans[q.id])).map((q: any) => ({
+        ...q,
+        sourceQuizTitle: quiz.title,
+        sourceQuizId: quiz.id
+      }));
+
+      if (setMistakes) {
+        if (quiz.id.startsWith('review-session-')) {
+          // In Review Mode: remove the questions answered correctly!
+          const correctIds = new Set(quiz.questions.filter((q: any) => isCorrect(q, ans[q.id])).map((q: any) => q.id));
+          setMistakes((prev: Question[]) => prev.filter(m => !correctIds.has(m.id)));
+        } else if (wrongQs.length > 0) {
+          // In standard mode: merge mistakes into the unified bank
+          setMistakes((prev: Question[]) => {
+            const map = new Map<string, Question>();
+            prev.forEach((item: Question) => map.set(item.id, item));
+            wrongQs.forEach((item: Question) => map.set(item.id, item));
+            return Array.from(map.values());
+          });
+        }
+      }
+
       setShowRes(true);
     }
   };
@@ -1279,20 +1527,25 @@ const App = () => {
     const s = localStorage.getItem('mq_subjects_v5');
     return s ? JSON.parse(s) : [];
   });
+  const [mistakes, setMistakes] = useState<Question[]>(() => {
+    const m = localStorage.getItem('studybuddy_mistakes_v1');
+    return m ? JSON.parse(m) : [];
+  });
 
   useEffect(() => localStorage.setItem('mq_quizzes_v5', JSON.stringify(quizzes)), [quizzes]);
   useEffect(() => localStorage.setItem('mq_attempts_v5', JSON.stringify(attempts)), [attempts]);
   useEffect(() => localStorage.setItem('mq_subjects_v5', JSON.stringify(subjects)), [subjects]);
+  useEffect(() => localStorage.setItem('studybuddy_mistakes_v1', JSON.stringify(mistakes)), [mistakes]);
 
   return (
     <Router>
       <div className={`min-h-screen bg-slate-50 pb-20 overflow-x-hidden ${lang === 'ar' ? 'rtl' : ''}`}>
-        <Navbar lang={lang} setLang={setLang} user={user} />
+        <Navbar lang={lang} setLang={setLang} user={user} mistakesCount={mistakes.length} />
         <main className="container mx-auto px-4 md:px-6 py-8 max-w-7xl">
           <Routes>
-            <Route path="/" element={<Dashboard strings={TRANSLATIONS[lang]} attempts={attempts} quizzes={quizzes} setQuizzes={setQuizzes} subjects={subjects} setSubjects={setSubjects} lang={lang} user={user} />} />
+            <Route path="/" element={<Dashboard strings={TRANSLATIONS[lang]} attempts={attempts} quizzes={quizzes} setQuizzes={setQuizzes} subjects={subjects} setSubjects={setSubjects} lang={lang} user={user} mistakes={mistakes} setMistakes={setMistakes} />} />
             <Route path="/create" element={<CreateQuiz strings={TRANSLATIONS[lang]} quizzes={quizzes} setQuizzes={setQuizzes} subjects={subjects} />} />
-            <Route path="/quiz/:quizId" element={<QuizInterface strings={TRANSLATIONS[lang]} setAttempts={setAttempts} quizzes={quizzes} user={user} />} />
+            <Route path="/quiz/:quizId" element={<QuizInterface strings={TRANSLATIONS[lang]} setAttempts={setAttempts} quizzes={quizzes} user={user} mistakes={mistakes} setMistakes={setMistakes} />} />
             <Route path="/stats" element={<StatsDashboard attempts={attempts} quizzes={quizzes} strings={TRANSLATIONS[lang]} lang={lang} />} />
             <Route path="/import" element={<ImportQuiz quizzes={quizzes} setQuizzes={setQuizzes} />} />
             <Route path="*" element={<div className="text-center py-20 font-black">الصفحة غير موجودة!</div>} />

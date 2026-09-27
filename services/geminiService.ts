@@ -37,13 +37,17 @@ export const generateQuizQuestions = async (
 
     if (!response.ok) {
       const errJson = await response.json().catch(() => ({}));
-      throw new Error(errJson.error || "حدث خطأ في توليد الأسئلة. حاول تقليل عددها أو تغيير الملف.");
+      const rawError = errJson.error || `HTTP Error ${response.status}: Failed to generate questions`;
+      throw new Error(rawError);
     }
 
     const data = await response.json();
+    if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0) {
+      throw new Error("No questions were returned by the AI generator.");
+    }
     return data.questions;
   } catch (error: any) {
     console.error("Quiz generation error:", error);
-    throw new Error(error.message || "حدث خطأ في توليد الأسئلة. حاول تقليل عددها أو تغيير الملف.");
+    throw new Error(error.message || "Failed to generate quiz questions.");
   }
 };

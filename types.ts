@@ -23,6 +23,8 @@ export interface Question {
   type: QuestionType;
   imageUrl?: string;
   imageAlt?: string;
+  sourceQuizTitle?: string;
+  sourceQuizId?: string;
 }
 
 export interface Quiz {
@@ -126,4 +128,7 @@ export interface LanguageStrings {
   switchToType: string;
   retryQuiz: string;
   reviewMistakes: string;
+  reviewMode: string;
+  mistakesBank: string;
+  startReview: string;
 }

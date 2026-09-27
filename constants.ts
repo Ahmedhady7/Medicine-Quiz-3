@@ -1,10 +1,9 @@
-
 import { LanguageStrings } from './types';
 
 export const TRANSLATIONS: Record<'en' | 'ar', LanguageStrings> = {
   en: {
-    title: 'Medicine Quiz',
-    uploadFiles: 'Upload Files (PDF/Text)',
+    title: 'StudyBuddy',
+    uploadFiles: 'Upload Files (PDF/Text/Images)',
     generateQuiz: 'AI Question Generator',
     subjects: 'Categories',
     chapters: 'Chapters',
@@ -63,10 +62,13 @@ export const TRANSLATIONS: Record<'en' | 'ar', LanguageStrings> = {
     switchToType: 'Switch to Type Answer',
     retryQuiz: 'Retry Quiz',
     reviewMistakes: 'Review Mistakes',
+    reviewMode: 'Review Mode',
+    mistakesBank: 'Mistakes Bank',
+    startReview: 'Start Review Session',
   },
   ar: {
-    title: 'Medicine Quiz',
-    uploadFiles: 'رفع الملفات (PDF/Text)',
+    title: 'StudyBuddy',
+    uploadFiles: 'رفع الملفات (PDF/نصوص/صور)',
     generateQuiz: 'توليد الأسئلة بالذكاء الاصطناعي',
     subjects: 'التصنيفات',
     chapters: 'الفصول',
@@ -125,5 +127,8 @@ export const TRANSLATIONS: Record<'en' | 'ar', LanguageStrings> = {
     switchToType: 'تحويل لكتابة الإجابة',
     retryQuiz: 'إعادة الاختبار',
     reviewMistakes: 'مراجعة الأسئلة الخاطئة',
+    reviewMode: 'وضع المراجعة',
+    mistakesBank: 'بنك الأسئلة الخاطئة',
+    startReview: 'بدء تدريب المراجعة',
   }
 };
