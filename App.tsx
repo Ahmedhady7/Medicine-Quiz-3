@@ -140,14 +140,6 @@ const Navbar = ({ lang, setLang, user }: { lang: 'en' | 'ar', setLang: any, user
   const location = useLocation();
   const isHome = location.pathname === '/';
 
-  const handleOpenKeySelector = async () => {
-    if (window.aistudio && window.aistudio.openSelectKey) {
-      await window.aistudio.openSelectKey();
-    } else {
-      alert("خاصية اختيار المفتاح غير متوفرة في هذا المتصفح.");
-    }
-  };
-
   const handleClearCache = () => {
     if (confirm(strings.clearCache + "?")) {
       localStorage.clear();
@@ -227,13 +219,6 @@ const Navbar = ({ lang, setLang, user }: { lang: 'en' | 'ar', setLang: any, user
         </button>
         <button onClick={() => navigate('/stats')} className="p-2 text-slate-500 hover:text-indigo-600 font-bold text-sm flex items-center gap-1">
           📊 <span className="hidden sm:inline">{strings.stats}</span>
-        </button>
-        <button 
-          onClick={handleOpenKeySelector}
-          title="إعداد مفتاح API"
-          className="p-2 bg-amber-50 text-amber-600 rounded-xl border border-amber-100 hover:bg-amber-100 transition-colors flex items-center gap-2 text-xs font-bold"
-        >
-          🔑 <span className="hidden md:inline">مفتاح API</span>
         </button>
         <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="text-xs font-bold text-slate-500 hover:text-indigo-600 border px-3 py-1 rounded-full">
           {lang === 'en' ? 'العربية' : 'English'}
@@ -651,6 +636,7 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes, subjects }: any) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [diff, setDiff] = useState(Difficulty.MEDIUM);
   const [type, setType] = useState(QuestionType.MIX);
@@ -668,17 +654,10 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes, subjects }: any) => {
   ]);
 
   const handleGenerate = async () => {
-    if (!files.length) return alert("الرجاء رفع ملف أولاً");
+    setErrorMsg("");
+    if (!files.length) return setErrorMsg("الرجاء رفع ملف أولاً للبدء في توليد الاختبار.");
     if (type === QuestionType.MIX && enabledTypes.length === 0) {
-      return alert("يرجى تحديد نوع واحد على الأقل للمزيج.");
-    }
-
-    if (window.aistudio) {
-      const hasKey = await window.aistudio.hasSelectedApiKey();
-      if (!hasKey) {
-        alert("يرجى اختيار مفتاح API أولاً.");
-        await window.aistudio.openSelectKey();
-      }
+      return setErrorMsg("يرجى تحديد نوع واحد على الأقل للمزيج.");
     }
     
     setLoading(true);
@@ -688,7 +667,7 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes, subjects }: any) => {
       const { text, images } = await processFilesForGemini(files, type, enabledTypes);
       if (!text && !images.length) throw new Error("لم نتمكن من الحصول على أي محتوى من الملفات المرفقة.");
       
-      setLoadingStatus("الذكاء الاصطناعي يقوم بالتوليد...");
+      setLoadingStatus("جاري توليد الاختبار...");
       const questions = await generateQuizQuestions(text, images, count, type, diff, 'original', mcqRatio, enabledTypes);
       
       const newQuiz: Quiz = {
@@ -702,11 +681,8 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes, subjects }: any) => {
       setQuizzes([...quizzes, newQuiz]);
       navigate(`/quiz/${newQuiz.id}`);
     } catch (e: any) {
-      if (e.message.includes("API Key must be set") || e.message === "API_KEY_ERROR") {
-        if (window.aistudio) await window.aistudio.openSelectKey();
-      } else {
-        alert(e.message || "حدث خطأ غير متوقع.");
-      }
+      console.error("Quiz creation error:", e);
+      setErrorMsg(e.message || "حدث خطأ غير متوقع أثناء التوليد. يرجى المحاولة مرة أخرى.");
     } finally {
       setLoading(false);
       setLoadingStatus("");
@@ -873,7 +849,17 @@ const CreateQuiz = ({ strings, quizzes, setQuizzes, subjects }: any) => {
             </div>
           </div>
         </div>
-        <button onClick={handleGenerate} disabled={loading || files.length === 0} className="w-full mt-10 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl shadow-xl hover:bg-indigo-700 disabled:opacity-50 transition-all flex flex-col items-center justify-center">
+        {errorMsg && (
+          <div className="mt-6 p-4 bg-rose-50 border-2 border-rose-200 text-rose-700 rounded-2xl font-black text-sm flex items-center justify-between animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⚠️</span>
+              <span>{errorMsg}</span>
+            </div>
+            <button onClick={() => setErrorMsg('')} className="p-1 hover:bg-rose-100 rounded-lg text-rose-500 font-black">✕</button>
+          </div>
+        )}
+
+        <button onClick={handleGenerate} disabled={loading || files.length === 0} className="w-full mt-8 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl shadow-xl hover:bg-indigo-700 disabled:opacity-50 transition-all flex flex-col items-center justify-center">
           {loading ? <span className="animate-pulse">{loadingStatus}</span> : "توليد الأسئلة الآن ✨"}
         </button>
       </Card>
@@ -888,7 +874,7 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
   const [ans, setAns] = useState<any>({});
   const [showExpl, setShowExpl] = useState(false);
   const [showRes, setShowRes] = useState(false);
-  const [start] = useState(Date.now());
+  const [start, setStart] = useState(Date.now());
 
   const quiz = useMemo(() => quizzes.find((q: any) => q.id === quizId), [quizId, quizzes]);
   const [typingModes, setTypingModes] = useState<Record<string, boolean>>({});
@@ -904,6 +890,15 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
     const url = `${window.location.origin}${window.location.pathname}#/import?data=${code}`;
     navigator.clipboard.writeText(url);
     alert(strings.copySuccess);
+  };
+
+  const handleRetry = () => {
+    setCur(0);
+    setAns({});
+    setShowExpl(false);
+    setShowRes(false);
+    setTypingModes({});
+    setStart(Date.now());
   };
 
   const isCorrect = (q: any, studentAnswer: any) => {
@@ -955,31 +950,140 @@ const QuizInterface = ({ strings, setAttempts, quizzes, user }: any) => {
     const score = quiz.questions.reduce((a: number, q: any) => a + (isCorrect(q, ans[q.id]) ? 1 : 0), 0);
     const percentage = Math.round((score / quiz.questions.length) * 100);
     const isPassed = percentage >= (quiz.passingScore || 60);
+    const wrongQuestions = quiz.questions.filter((q: any) => !isCorrect(q, ans[q.id]));
 
     return (
-      <div className="max-w-3xl mx-auto animate-in zoom-in duration-500">
-        <Card className={`text-center p-12 !rounded-[4rem] border-t-8 shadow-2xl ${isPassed ? 'border-emerald-500' : 'border-rose-500'}`}>
-          <div className="text-7xl mb-6">{isPassed ? '🎉' : '💔'}</div>
+      <div className="max-w-4xl mx-auto animate-in zoom-in duration-500 space-y-8">
+        <Card className={`text-center p-8 md:p-12 !rounded-[3.5rem] border-t-8 shadow-2xl ${isPassed ? 'border-emerald-500' : 'border-rose-500'}`}>
+          <div className="text-7xl mb-4">{isPassed ? '🎉' : '💔'}</div>
           <h2 className="text-4xl font-black mb-2 text-slate-800">{strings.results}</h2>
-          <p className={`text-2xl font-black mb-8 ${isPassed ? 'text-emerald-600' : 'text-rose-600'}`}>
+          <p className={`text-2xl font-black mb-6 ${isPassed ? 'text-emerald-600' : 'text-rose-600'}`}>
             {isPassed ? strings.pass : strings.fail} ({percentage}%)
           </p>
           
-          <div className="grid grid-cols-2 gap-6 mb-10">
-            <div className="p-6 bg-slate-50 rounded-3xl"><p className="text-5xl font-black text-indigo-600">{score}/{quiz.questions.length}</p><p className="text-slate-400 font-bold text-xs mt-2">النتيجة</p></div>
-            <div className="p-6 bg-slate-50 rounded-3xl"><p className="text-5xl font-black text-indigo-600">{Math.round((Date.now()-start)/1000)}ث</p><p className="text-slate-400 font-bold text-xs mt-2">الوقت</p></div>
+          <div className="grid grid-cols-2 gap-4 md:gap-6 mb-8">
+            <div className="p-6 bg-slate-50 rounded-3xl">
+              <p className="text-4xl md:text-5xl font-black text-indigo-600">{score}/{quiz.questions.length}</p>
+              <p className="text-slate-400 font-bold text-xs mt-2">الدرجة النهائية</p>
+            </div>
+            <div className="p-6 bg-slate-50 rounded-3xl">
+              <p className="text-4xl md:text-5xl font-black text-indigo-600">{Math.round((Date.now()-start)/1000)}ث</p>
+              <p className="text-slate-400 font-bold text-xs mt-2">الوقت المستغرق</p>
+            </div>
           </div>
           
-          <div className="space-y-4">
-            <button onClick={handleShare} className="w-full py-5 bg-amber-50 text-amber-600 rounded-2xl font-black text-xl hover:bg-amber-100 transition-all flex items-center justify-center gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <button 
+              onClick={handleRetry} 
+              className="py-4 px-6 bg-emerald-600 text-white rounded-2xl font-black text-lg shadow-xl hover:bg-emerald-700 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <span>🔄</span> {strings.retryQuiz}
+            </button>
+            <button onClick={handleShare} className="py-4 px-6 bg-amber-50 text-amber-600 rounded-2xl font-black text-lg hover:bg-amber-100 transition-all flex items-center justify-center gap-2">
               <span>🔗</span> {strings.share}
             </button>
-            <button onClick={() => navigate('/stats')} className="w-full py-5 bg-indigo-50 text-indigo-600 rounded-2xl font-black text-xl hover:bg-indigo-100 transition-all">عرض الإحصائيات 📊</button>
-            <button onClick={() => navigate('/')} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl shadow-xl hover:scale-105 active:scale-95 transition-all">
-              {strings.home}
+            <button onClick={() => navigate('/stats')} className="py-4 px-6 bg-indigo-50 text-indigo-600 rounded-2xl font-black text-lg hover:bg-indigo-100 transition-all flex items-center justify-center gap-2">
+              <span>📊</span> {strings.stats}
+            </button>
+            <button onClick={() => navigate('/')} className="py-4 px-6 bg-slate-900 text-white rounded-2xl font-black text-lg shadow-xl hover:bg-black active:scale-95 transition-all flex items-center justify-center gap-2">
+              <span>🏠</span> {strings.home}
             </button>
           </div>
         </Card>
+
+        {/* Incorrect Questions Review Section */}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3">
+              <span>🎯</span> {strings.reviewMistakes}
+              <span className={`text-xs px-3 py-1 rounded-full font-black ${wrongQuestions.length === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                {wrongQuestions.length} {wrongQuestions.length === 1 ? 'سؤال خاطئ' : 'أسئلة خاطئة'}
+              </span>
+            </h3>
+          </div>
+
+          {wrongQuestions.length === 0 ? (
+            <Card className="text-center p-8 bg-emerald-50/70 border-2 border-emerald-200">
+              <div className="text-6xl mb-3">🏆</div>
+              <h4 className="text-2xl font-black text-emerald-800 mb-1">إجابات مثالية بدون أي أخطاء!</h4>
+              <p className="text-emerald-700 font-bold text-sm">تهانينا! لقد أجبت على كافة أسئلة الاختبار ({quiz.questions.length}) بصورة صحيحة 100%.</p>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {wrongQuestions.map((q: any, idx: number) => {
+                const studentAns = ans[q.id];
+                const formattedStudentAns = Array.isArray(studentAns)
+                  ? (studentAns.length > 0 ? studentAns.join(' | ') : 'لم يتم تحديد إجابة')
+                  : (studentAns && String(studentAns).trim().length > 0 ? String(studentAns) : 'لم يتم تحديد إجابة');
+                
+                const formattedCorrectAns = Array.isArray(q.correctAnswer)
+                  ? q.correctAnswer.join(' | ')
+                  : q.correctAnswer;
+
+                return (
+                  <Card key={q.id || idx} className="p-6 md:p-8 space-y-5 border-2 border-rose-100 hover:border-rose-200 transition-all">
+                    {q.imageUrl && (
+                      <div className="rounded-2xl overflow-hidden border-2 border-slate-100 bg-white">
+                        <img src={q.imageUrl} alt="Question visual" className="w-full max-h-60 object-contain mx-auto" />
+                      </div>
+                    )}
+
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="text-xs font-black px-3 py-1.5 bg-rose-100 text-rose-700 rounded-xl flex-shrink-0">
+                        السؤال {idx + 1}
+                      </span>
+                      <h4 className="text-lg md:text-xl font-black text-slate-800 leading-snug flex-1">
+                        {q.text}
+                      </h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="p-5 bg-rose-50 border-2 border-rose-200/80 rounded-2xl">
+                        <span className="text-xs font-black text-rose-600 block mb-1">❌ إجابتك:</span>
+                        <p className="font-black text-rose-950 text-base break-words">{formattedStudentAns}</p>
+                      </div>
+                      <div className="p-5 bg-emerald-50 border-2 border-emerald-200/80 rounded-2xl">
+                        <span className="text-xs font-black text-emerald-700 block mb-1">✅ الإجابة النموذجية الصحيحة:</span>
+                        <p className="font-black text-emerald-950 text-base break-words">{formattedCorrectAns}</p>
+                      </div>
+                    </div>
+
+                    {q.options && q.options.length > 0 && (
+                      <div className="space-y-2 pt-2 border-t border-slate-100">
+                        <span className="text-xs font-black text-slate-400 block">خيارات السؤال:</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {q.options.map((opt: string, optIdx: number) => {
+                            const isSelected = Array.isArray(studentAns) ? studentAns.includes(opt) : studentAns === opt;
+                            const isCorrectOpt = Array.isArray(q.correctAnswer) ? q.correctAnswer.includes(opt) : q.correctAnswer === opt;
+                            
+                            let optBg = "bg-white border-slate-200 text-slate-700";
+                            if (isCorrectOpt) optBg = "bg-emerald-50 border-emerald-400 text-emerald-900 font-black";
+                            else if (isSelected) optBg = "bg-rose-50 border-rose-300 text-rose-900 font-black";
+
+                            return (
+                              <div key={optIdx} className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 ${optBg}`}>
+                                <span>{String.fromCharCode(65 + optIdx)}. {opt}</span>
+                                {isCorrectOpt && <span className="text-emerald-600 font-black">✓</span>}
+                                {isSelected && !isCorrectOpt && <span className="text-rose-600 font-black">✕</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {q.explanation && (
+                      <div className="p-5 bg-indigo-50/70 border border-indigo-100 rounded-2xl text-xs md:text-sm leading-relaxed text-indigo-950 font-bold">
+                        <span className="font-black text-indigo-600 block mb-1">💡 {strings.explanation}:</span>
+                        {q.explanation}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     );
   }

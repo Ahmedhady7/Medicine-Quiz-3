@@ -61,6 +61,8 @@ export const TRANSLATIONS: Record<'en' | 'ar', LanguageStrings> = {
     practiceTitle: 'Practical Exam',
     switchToMCQ: 'Switch to Multiple Choice',
     switchToType: 'Switch to Type Answer',
+    retryQuiz: 'Retry Quiz',
+    reviewMistakes: 'Review Mistakes',
   },
   ar: {
     title: 'Medicine Quiz',
@@ -121,5 +123,7 @@ export const TRANSLATIONS: Record<'en' | 'ar', LanguageStrings> = {
     practiceTitle: 'امتحان عملي',
     switchToMCQ: 'تحويل لاختيار من متعدد',
     switchToType: 'تحويل لكتابة الإجابة',
+    retryQuiz: 'إعادة الاختبار',
+    reviewMistakes: 'مراجعة الأسئلة الخاطئة',
   }
 };

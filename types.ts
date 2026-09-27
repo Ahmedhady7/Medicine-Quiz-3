@@ -1,4 +1,3 @@
-
 export enum Difficulty {
   EASY = 'easy',
   MEDIUM = 'medium',
@@ -66,15 +65,6 @@ export interface User {
   isLoggedIn: boolean;
 }
 
-declare global {
-  interface Window {
-    aistudio: {
-      hasSelectedApiKey: () => Promise<boolean>;
-      openSelectKey: () => Promise<void>;
-    };
-  }
-}
-
 export interface LanguageStrings {
   title: string;
   uploadFiles: string;
@@ -134,4 +124,6 @@ export interface LanguageStrings {
   practiceTitle: string;
   switchToMCQ: string;
   switchToType: string;
+  retryQuiz: string;
+  reviewMistakes: string;
 }
